@@ -6,6 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1C9BC8722E49C94A00B17630 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8712E49C94A00B17630 /* Auth */; };
+		1C9BC8742E49C94A00B17630 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8732E49C94A00B17630 /* Functions */; };
+		1C9BC8762E49C94A00B17630 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8752E49C94A00B17630 /* PostgREST */; };
+		1C9BC8782E49C94A00B17630 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8772E49C94A00B17630 /* Realtime */; };
+		1C9BC87A2E49C94A00B17630 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8792E49C94A00B17630 /* Storage */; };
+		1C9BC87C2E49C94A00B17630 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC87B2E49C94A00B17630 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		1CD74F912E45DC5A00DFEA0D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +74,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1C9BC8762E49C94A00B17630 /* PostgREST in Frameworks */,
+				1C9BC8742E49C94A00B17630 /* Functions in Frameworks */,
+				1C9BC87C2E49C94A00B17630 /* Supabase in Frameworks */,
+				1C9BC8722E49C94A00B17630 /* Auth in Frameworks */,
+				1C9BC87A2E49C94A00B17630 /* Storage in Frameworks */,
+				1C9BC8782E49C94A00B17630 /* Realtime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +140,12 @@
 			);
 			name = "DEFENDO-AI";
 			packageProductDependencies = (
+				1C9BC8712E49C94A00B17630 /* Auth */,
+				1C9BC8732E49C94A00B17630 /* Functions */,
+				1C9BC8752E49C94A00B17630 /* PostgREST */,
+				1C9BC8772E49C94A00B17630 /* Realtime */,
+				1C9BC8792E49C94A00B17630 /* Storage */,
+				1C9BC87B2E49C94A00B17630 /* Supabase */,
 			);
 			productName = "DEFENDO-AI";
 			productReference = 1CD74F832E45DC5400DFEA0D /* DEFENDO-AI.app */;
@@ -208,6 +229,9 @@
 			);
 			mainGroup = 1CD74F7A2E45DC5400DFEA0D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1CD74F842E45DC5400DFEA0D /* Products */;
 			projectDirPath = "";
@@ -418,6 +442,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -450,6 +475,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -591,6 +617,50 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1C9BC8712E49C94A00B17630 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		1C9BC8732E49C94A00B17630 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		1C9BC8752E49C94A00B17630 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		1C9BC8772E49C94A00B17630 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		1C9BC8792E49C94A00B17630 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		1C9BC87B2E49C94A00B17630 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1CD74F7B2E45DC5400DFEA0D /* Project object */;
 }
