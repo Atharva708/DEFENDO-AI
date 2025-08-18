@@ -52,17 +52,19 @@ struct BookingFlowView: View {
                 // Navigation Buttons
                 HStack {
                     if currentStep > 0 {
-                        Button("Back") {
+                        Button(action: {
                             withAnimation {
                                 currentStep -= 1
                             }
+                        }) {
+                            Text("Back")
                         }
                         .buttonStyle(SecondaryButtonStyle())
                     }
                     
                     Spacer()
                     
-                    Button(currentStep == 3 ? "Confirm" : "Next") {
+                    Button(action: {
                         if currentStep < 3 {
                             withAnimation {
                                 currentStep += 1
@@ -71,6 +73,8 @@ struct BookingFlowView: View {
                             // Handle booking confirmation
                             appState.currentScreen = .dashboard
                         }
+                    }) {
+                        Text(currentStep == 3 ? "Confirm" : "Next")
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(currentStep == 0 && selectedService == nil)

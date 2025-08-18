@@ -10,29 +10,38 @@ import MapKit
 
 struct RootView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
     
     var body: some View {
         Group {
-            switch appState.currentScreen {
-            case .onboarding:
-                OnboardingView()
-            case .dashboard:
+            if authService.isLoading {
+                LoadingView()
+            } else if authService.isAuthenticated {
                 DashboardView()
-            case .sos:
-                SOSView()
-            case .booking:
-                BookingFlowView()
-            case .marketplace:
-                MarketplaceView()
-            case .profile:
-                ProfileView()
-            case .providerDashboard:
-                ProviderDashboardView()
-            case .adminDashboard:
-                AdminDashboardView()
+            } else {
+                AuthenticationContainerView()
             }
         }
-        .animation(.easeInOut, value: appState.currentScreen)
+        .animation(.easeInOut, value: authService.isAuthenticated)
+    }
+}
+
+// MARK: - Loading View
+struct LoadingView: View {
+    var body: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                
+                Text("Loading SecureNow...")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 }
 
@@ -93,6 +102,7 @@ struct OnboardingView: View {
 // MARK: - Dashboard View
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
     @State private var selectedTab = 0
     
     var body: some View {
@@ -104,30 +114,37 @@ struct DashboardView: View {
                 }
                 .tag(0)
             
+            ProfessionalMapView()
+                .tabItem {
+                    Image(systemName: "map.fill")
+                    Text("Map")
+                }
+                .tag(1)
+            
             MarketplaceView()
                 .tabItem {
                     Image(systemName: "magnifyingglass")
                     Text("Explore")
                 }
-                .tag(1)
+                .tag(2)
             
             BookingsView()
                 .tabItem {
                     Image(systemName: "calendar")
                     Text("Bookings")
                 }
-                .tag(2)
+                .tag(3)
             
             ProfileView()
                 .tabItem {
                     Image(systemName: "person.fill")
                     Text("Profile")
                 }
-                .tag(3)
+                .tag(4)
         }
         .overlay(
             // Floating SOS Button
-        VStack {
+            VStack {
                 Spacer()
                 HStack {
                     Spacer()
@@ -231,7 +248,7 @@ struct QuickActionsGrid: View {
             }
         }
         .sheet(isPresented: $showingLocationView) {
-            FullMapView()
+            ProfessionalMapView()
                 .environmentObject(locationService)
         }
     }
@@ -393,7 +410,7 @@ struct MiniHeatmapCard: View {
         .background(Color(.systemGray6))
         .cornerRadius(12)
         .sheet(isPresented: $showingFullMap) {
-            FullMapView()
+            ProfessionalMapView()
                 .environmentObject(locationService)
         }
         .onChange(of: locationService.currentLocation) { newLocation in

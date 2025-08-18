@@ -9,8 +9,10 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
     @State private var showingSettings = false
     @State private var showingEmergencyContacts = false
+    @State private var showingSignOutAlert = false
     
     var body: some View {
         NavigationView {
@@ -30,6 +32,9 @@ struct ProfileView: View {
                     
                     // Safety Settings
                     SafetySettingsSection()
+                    
+                    // Sign Out Section
+                    SignOutSection()
                 }
                 .padding()
             }
@@ -44,11 +49,24 @@ struct ProfileView: View {
             .sheet(isPresented: $showingEmergencyContacts) {
                 EmergencyContactsView()
             }
+            .alert("Sign Out", isPresented: $showingSignOutAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Sign Out", role: .destructive) {
+                    Task {
+                        await authService.signOut()
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to sign out?")
+            }
         }
     }
 }
 
 struct ProfileHeaderView: View {
+    @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var locationService: LocationService
+    
     var body: some View {
         VStack(spacing: 15) {
             // Profile Image
@@ -58,15 +76,15 @@ struct ProfileHeaderView: View {
             
             // User Info
             VStack(spacing: 5) {
-                Text("John Doe")
+                Text(authService.currentUser?.name ?? "User")
                     .font(.title2)
                     .fontWeight(.bold)
                 
-                Text("john.doe@email.com")
+                Text(authService.currentUser?.email ?? "user@email.com")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
-                Text("+1 (555) 123-4567")
+                Text(authService.currentUser?.phone ?? "+1 (555) 123-4567")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -77,21 +95,22 @@ struct ProfileHeaderView: View {
                     Text("Safety Score")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Text("85")
+                    Text("\(locationService.getSafetyScore())")
                         .font(.title)
                         .fontWeight(.bold)
-                        .foregroundColor(.green)
+                        .foregroundColor(safetyScoreColor)
                 }
                 
                 Spacer()
                 
                 VStack(alignment: .trailing) {
-                    Text("Member Since")
+                    Text("Location Status")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Text("Jan 2024")
+                    Text(locationService.isLocationEnabled ? "Active" : "Inactive")
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .foregroundColor(locationService.isLocationEnabled ? .green : .red)
                 }
             }
             .padding()
@@ -101,6 +120,18 @@ struct ProfileHeaderView: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+    
+    private var safetyScoreColor: Color {
+        let score = locationService.getSafetyScore()
+        switch score {
+        case 80...100:
+            return .green
+        case 60...79:
+            return .orange
+        default:
+            return .red
+        }
     }
 }
 
@@ -418,7 +449,56 @@ struct AddContactView: View {
     }
 }
 
+struct SignOutSection: View {
+    @EnvironmentObject var authService: AuthService
+    @State private var showingSignOutAlert = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("Account")
+                .font(.headline)
+            
+            Button(action: {
+                showingSignOutAlert = true
+            }) {
+                HStack {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .foregroundColor(.red)
+                        .frame(width: 24)
+                    
+                    Text("Sign Out")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.red)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .alert("Sign Out", isPresented: $showingSignOutAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Sign Out", role: .destructive) {
+                Task {
+                    await authService.signOut()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to sign out?")
+        }
+    }
+}
+
 #Preview {
     ProfileView()
         .environmentObject(AppState())
+        .environmentObject(AuthService())
+        .environmentObject(LocationService())
 }

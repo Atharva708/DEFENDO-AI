@@ -11,8 +11,10 @@ import Combine
 @main
 struct DEFENDO_AIApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var authService = AuthService()
     @StateObject private var notificationService = NotificationService()
     @StateObject private var locationService = LocationService()
+    @StateObject private var mapKitService = MapKitService()
     @StateObject private var emergencyContactService = EmergencyContactService()
     @StateObject private var apiService = APIService()
     
@@ -20,8 +22,10 @@ struct DEFENDO_AIApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
+                .environmentObject(authService)
                 .environmentObject(notificationService)
                 .environmentObject(locationService)
+                .environmentObject(mapKitService)
                 .environmentObject(emergencyContactService)
                 .environmentObject(apiService)
         }
@@ -66,9 +70,9 @@ class AppState: ObservableObject {
 
 struct User {
     let id: String
-    let name: String
+    var name: String
     let email: String
-    let phone: String
+    var phone: String
     let role: AppState.UserRole
     var safetyScore: Int = 85
     var emergencyContacts: [EmergencyContact] = []
@@ -180,7 +184,7 @@ struct IncidentReport {
 }
 
 // Codable conformance for JSON support
-enum IncidentType: String, Codable {
+enum IncidentType: String, Codable, CaseIterable {
     case assault = "assault"
     case theft = "theft"
     case medical = "medical"

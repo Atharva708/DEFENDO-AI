@@ -11,6 +11,7 @@ import CoreLocation
 
 struct SOSView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var locationService: LocationService
     @EnvironmentObject var emergencyContactService: EmergencyContactService
@@ -24,6 +25,8 @@ struct SOSView: View {
     @State private var isDragging = false
     @State private var currentAlertId: String?
     @State private var showingLocationPermission = false
+    @State private var showingEmergencyContacts = false
+    @State private var emergencyLocationData: [String: Any] = [:]
     @State private var cancellables = Set<AnyCancellable>()
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -44,9 +47,17 @@ struct SOSView: View {
                     
                     Spacer()
                     
-                    Text("EMERGENCY SOS")
-                        .font(.headline)
-                        .foregroundColor(.white)
+                    VStack(spacing: 2) {
+                        Text("EMERGENCY SOS")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        if let user = authService.currentUser {
+                            Text(user.name)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
                     
                     Spacer()
                     
@@ -127,6 +138,38 @@ struct SOSView: View {
                 
                 Spacer()
                 
+                // Emergency Information
+                if isSOSActive {
+                    VStack(spacing: 15) {
+                        // Location Info
+                        if let location = locationService.currentLocation {
+                            VStack(spacing: 5) {
+                                Text("Your Location")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                
+                                Text(locationService.lastKnownAddress ?? "Unknown location")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding()
+                            .background(Color.red.opacity(0.3))
+                            .cornerRadius(8)
+                        }
+                        
+                        // Emergency Contacts
+                        Button("View Emergency Contacts") {
+                            showingEmergencyContacts = true
+                        }
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.blue.opacity(0.3))
+                        .cornerRadius(8)
+                    }
+                    .padding(.horizontal)
+                }
+                
                 // Slide to Cancel
                 if isSOSActive {
                     VStack(spacing: 15) {
@@ -182,6 +225,19 @@ struct SOSView: View {
         .sheet(isPresented: $showingSafeWordInput) {
             SafeWordInputView(safeWord: $safeWord)
         }
+        .sheet(isPresented: $showingEmergencyContacts) {
+            EmergencyContactsView()
+        }
+        .alert("Location Permission Required", isPresented: $showingLocationPermission) {
+            Button("Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("SecureNow needs location access to provide emergency services. Please enable location access in Settings.")
+        }
     }
     
     private func activateSOS() {
@@ -194,6 +250,9 @@ struct SOSView: View {
         timeRemaining = 300
         currentAlertId = UUID().uuidString
         
+        // Get emergency location data
+        emergencyLocationData = locationService.getEmergencyLocationData()
+        
         // Request notification permission if not granted
         if !notificationService.isAuthorized {
             notificationService.requestPermission()
@@ -201,7 +260,7 @@ struct SOSView: View {
         
         // Send SOS alert to backend
         let sosAlert = SOSAlertRequest(
-            userId: appState.currentUser?.id ?? "guest",
+            userId: authService.currentUser?.id ?? "guest",
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
             description: "SOS Emergency Activated",
@@ -246,10 +305,18 @@ struct SOSView: View {
         )
         .store(in: &cancellables)
         
-        // Notify emergency contacts
+        // Notify emergency contacts with enhanced location data
+        let emergencyMessage = """
+        SOS Emergency Alert - Please check on me immediately
+        
+        Location: \(locationService.lastKnownAddress ?? "Unknown location")
+        Coordinates: \(location.coordinate.latitude), \(location.coordinate.longitude)
+        Time: \(Date().formatted(date: .abbreviated, time: .shortened))
+        """
+        
         emergencyContactService.notifyAllEmergencyContacts(
             location: locationService.getLocationString(),
-            message: "SOS Emergency Alert - Please check on me immediately"
+            message: emergencyMessage
         )
         
         // Schedule notification
@@ -257,6 +324,11 @@ struct SOSView: View {
             location: locationService.getLocationString(),
             timeRemaining: timeRemaining
         )
+        
+        // Start location tracking if not already active
+        if !locationService.isTrackingLocation {
+            locationService.startLocationTracking()
+        }
     }
     
     private func cancelSOS() {
