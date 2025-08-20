@@ -13,6 +13,7 @@
 		1C9BC8782E49C94A00B17630 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8772E49C94A00B17630 /* Realtime */; };
 		1C9BC87A2E49C94A00B17630 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8792E49C94A00B17630 /* Storage */; };
 		1C9BC87C2E49C94A00B17630 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC87B2E49C94A00B17630 /* Supabase */; };
+
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 		1CD74F832E45DC5400DFEA0D /* DEFENDO-AI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DEFENDO-AI.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CD74F902E45DC5A00DFEA0D /* DEFENDO-AITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DEFENDO-AITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CD74F9A2E45DC5A00DFEA0D /* DEFENDO-AIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DEFENDO-AIUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -359,6 +361,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = Yes;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
@@ -417,6 +420,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = Yes;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -437,6 +441,7 @@
 				DEVELOPMENT_TEAM = 8JF8BT68CV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DEFENDO-AI/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -448,6 +453,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
+				NEW_SETTING = "";
+				NSLocationAlwaysAndWhenInUseUsageDescription = "Yes ";
 				PRODUCT_BUNDLE_IDENTIFIER = "atharva708.DEFENDO-AI";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -470,6 +477,7 @@
 				DEVELOPMENT_TEAM = 8JF8BT68CV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "DEFENDO-AI/Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -481,6 +489,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
+				NEW_SETTING = "";
+				NSLocationAlwaysAndWhenInUseUsageDescription = "Yes ";
 				PRODUCT_BUNDLE_IDENTIFIER = "atharva708.DEFENDO-AI";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

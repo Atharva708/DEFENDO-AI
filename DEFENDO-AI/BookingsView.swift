@@ -64,6 +64,8 @@ struct BookingsView: View {
         switch selectedFilter {
         case "Upcoming":
             return allBookings.filter { $0.status == .pending || $0.status == .confirmed }
+        case "In Progress":
+            return allBookings.filter { $0.status == .inProgress }
         case "Completed":
             return allBookings.filter { $0.status == .completed }
         case "Cancelled":
@@ -155,6 +157,7 @@ struct StatusBadge: View {
         switch status {
         case .pending: return "Pending"
         case .confirmed: return "Confirmed"
+        case .inProgress: return "In Progress"
         case .completed: return "Completed"
         case .cancelled: return "Cancelled"
         }
@@ -164,6 +167,7 @@ struct StatusBadge: View {
         switch status {
         case .pending: return .orange
         case .confirmed: return .blue
+        case .inProgress: return .purple
         case .completed: return .green
         case .cancelled: return .red
         }

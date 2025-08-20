@@ -55,7 +55,7 @@ class NotificationService: ObservableObject {
     func scheduleBookingReminder(booking: Booking) {
         let content = UNMutableNotificationContent()
         content.title = "Upcoming Security Service"
-        content.body = "Your \(booking.serviceType == .securityGuard ? "Security Guard" : "Drone Patrol") service starts in 30 minutes"
+        content.body = "Your \(booking.serviceType == ServiceType.securityGuard ? "Security Guard" : "Drone Patrol") service starts in 30 minutes"
         content.sound = .default
         content.categoryIdentifier = "BOOKING_REMINDER"
         

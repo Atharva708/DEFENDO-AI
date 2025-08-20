@@ -126,6 +126,7 @@ struct FeatureRow: View {
 // MARK: - Login View
 struct LoginView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var email = ""
     @State private var password = ""
@@ -257,8 +258,13 @@ struct LoginView: View {
             SignUpView()
                 .environmentObject(authService)
         }
+        .onAppear {
+            // Clear any stale auth error/success messages when opening the login sheet
+            authService.clearMessages()
+        }
         .onChange(of: authService.isAuthenticated) { isAuthenticated in
             if isAuthenticated {
+                appState.currentScreen = .dashboard
                 dismiss()
             }
         }
@@ -268,6 +274,7 @@ struct LoginView: View {
 // MARK: - Sign Up View
 struct SignUpView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var email = ""
@@ -438,8 +445,13 @@ struct SignUpView: View {
             LoginView()
                 .environmentObject(authService)
         }
+        .onAppear {
+            // Clear any stale auth error/success messages when opening the signup sheet
+            authService.clearMessages()
+        }
         .onChange(of: authService.isAuthenticated) { isAuthenticated in
             if isAuthenticated {
+                appState.currentScreen = .dashboard
                 dismiss()
             }
         }
@@ -555,3 +567,4 @@ struct CustomTextFieldStyle: TextFieldStyle {
     AuthenticationContainerView()
         .environmentObject(AuthService())
 }
+

@@ -151,11 +151,11 @@ class LocationService: NSObject, ObservableObject {
     private func loadSafetyZones() {
         // Load predefined safety zones (in a real app, this would come from an API)
         safetyZones = [
-            SafetyZone(id: "1", name: "Downtown Business District", color: .green, riskLevel: 1, description: "Low risk area with high police presence"),
-            SafetyZone(id: "2", name: "University Campus", color: .green, riskLevel: 1, description: "Safe campus environment"),
-            SafetyZone(id: "3", name: "Industrial Area", color: .yellow, riskLevel: 3, description: "Moderate risk, limited lighting"),
-            SafetyZone(id: "4", name: "Park Area", color: .yellow, riskLevel: 2, description: "Moderate risk during late hours"),
-            SafetyZone(id: "5", name: "High Crime Zone", color: .red, riskLevel: 5, description: "High risk area, avoid if possible")
+            SafetyZone(id: "1", name: "Downtown Business District", color: SafetyZoneColor.green, riskLevel: 1, description: "Low risk area with high police presence"),
+            SafetyZone(id: "2", name: "University Campus", color: SafetyZoneColor.green, riskLevel: 1, description: "Safe campus environment"),
+            SafetyZone(id: "3", name: "Industrial Area", color: SafetyZoneColor.yellow, riskLevel: 3, description: "Moderate risk, limited lighting"),
+            SafetyZone(id: "4", name: "Park Area", color: SafetyZoneColor.yellow, riskLevel: 2, description: "Moderate risk during late hours"),
+            SafetyZone(id: "5", name: "High Crime Zone", color: SafetyZoneColor.red, riskLevel: 5, description: "High risk area, avoid if possible")
         ]
     }
     
@@ -167,11 +167,11 @@ class LocationService: NSObject, ObservableObject {
         let hour = Calendar.current.component(.hour, from: Date())
         
         if hour >= 22 || hour <= 6 {
-            return safetyZones.first { $0.color == .red }
+            return safetyZones.first { $0.color == SafetyZoneColor.red }
         } else if hour >= 18 || hour <= 8 {
-            return safetyZones.first { $0.color == .yellow }
+            return safetyZones.first { $0.color == SafetyZoneColor.yellow }
         } else {
-            return safetyZones.first { $0.color == .green }
+            return safetyZones.first { $0.color == SafetyZoneColor.green }
         }
     }
     
@@ -179,11 +179,11 @@ class LocationService: NSObject, ObservableObject {
         guard let zone = getCurrentSafetyZone() else { return 50 }
         
         switch zone.color {
-        case .green:
+        case SafetyZoneColor.green:
             return 85
-        case .yellow:
+        case SafetyZoneColor.yellow:
             return 65
-        case .red:
+        case SafetyZoneColor.red:
             return 35
         }
     }
@@ -233,21 +233,21 @@ class LocationService: NSObject, ObservableObject {
             IncidentReport(
                 id: "1",
                 reporterId: "user1",
-                incidentType: .suspicious,
+                incidentType: IncidentType.suspicious,
                 description: "Suspicious activity reported",
                 location: "Near Main St & 5th Ave",
                 timestamp: Date().addingTimeInterval(-3600),
-                status: .investigating,
+                status: IncidentStatus.investigating,
                 attachments: []
             ),
             IncidentReport(
                 id: "2",
                 reporterId: "user2",
-                incidentType: .theft,
+                incidentType: IncidentType.theft,
                 description: "Vehicle break-in reported",
                 location: "Parking lot on Oak St",
                 timestamp: Date().addingTimeInterval(-7200),
-                status: .resolved,
+                status: IncidentStatus.resolved,
                 attachments: []
             )
         ]

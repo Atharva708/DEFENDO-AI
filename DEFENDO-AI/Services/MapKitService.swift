@@ -236,7 +236,7 @@ class MapKitService: NSObject, ObservableObject {
                 coordinate: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
                 title: "Elite Security Services",
                 subtitle: "Available - 4.2★ rating",
-                serviceType: .securityGuard,
+                serviceType: ServiceType.securityGuard,
                 isAvailable: true,
                 rating: 4.2
             ),
@@ -244,7 +244,7 @@ class MapKitService: NSObject, ObservableObject {
                 coordinate: CLLocationCoordinate2D(latitude: 37.7849, longitude: -122.4094),
                 title: "SkyWatch Drones",
                 subtitle: "Available - 4.5★ rating",
-                serviceType: .dronePatrol,
+                serviceType: ServiceType.dronePatrol,
                 isAvailable: true,
                 rating: 4.5
             )
