@@ -6,10 +6,66 @@
 //
 
 import SwiftUI
+import MapKit
 
-// ... (all your existing code remains unchanged above)
+struct ProviderDashboardView: View {
+    @EnvironmentObject var mapKitService: MapKitService
+    @State private var selectedAnnotation: MKAnnotation?
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Map showing current location and provider-relevant overlays
+                MapViewRepresentable(
+                    region: $mapKitService.mapRegion,
+                    mapType: mapKitService.mapType,
+                    showTraffic: mapKitService.showTraffic,
+                    showBuildings: mapKitService.showBuildings,
+                    showPointsOfInterest: mapKitService.showPointsOfInterest,
+                    userLocation: mapKitService.userLocation,
+                    safetyZones: mapKitService.safetyZones,
+                    nearbyIncidents: mapKitService.nearbyIncidents,
+                    emergencyContacts: mapKitService.emergencyContacts,
+                    securityProviders: mapKitService.securityProviders,
+                    routeToDestination: mapKitService.routeToDestination,
+                    selectedAnnotation: $selectedAnnotation
+                )
+                .ignoresSafeArea()
+                
+                // Floating button to center map on user location
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            mapKitService.centerOnUserLocation()
+                        }) {
+                            Image(systemName: "location.fill")
+                                .foregroundColor(.white)
+                                .font(.title2)
+                                .frame(width: 50, height: 50)
+                                .background(Color.blue)
+                                .clipShape(Circle())
+                                .shadow(radius: 5)
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.top, 60)
+                    }
+                    Spacer()
+                }
+                
+                // Optionally, you can add your dashboard overlays/panels here
+            }
+            .onAppear {
+                mapKitService.startLocationTracking()
+                mapKitService.loadEmergencyContacts()
+            }
+            .navigationTitle("Provider Dashboard")
+            .navigationBarTitleDisplayMode(.large)
+        }
+    }
+}
 
-// ---- Paste this definition at the end of your file ----
+// ---- The settings row remains at the end of your file ----
 
 struct SettingsRow: View {
     let icon: String
@@ -43,4 +99,10 @@ struct SettingsRow: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
     }
+}
+
+// Preview with a MapKitService injected
+#Preview {
+    ProviderDashboardView()
+        .environmentObject(MapKitService())
 }
