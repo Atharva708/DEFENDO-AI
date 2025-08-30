@@ -329,6 +329,7 @@ struct SettingsView: View {
 }
 
 struct EmergencyContactsView: View {
+<<<<<<< HEAD
     @EnvironmentObject var emergencyContactService: EmergencyContactService
     @State private var showingAddContact = false
     @State private var newContactName = ""
@@ -496,6 +497,13 @@ struct AddEmergencyContactView: View {
                 }
                 .disabled(name.isEmpty || phone.isEmpty)
             )
+=======
+    var body: some View {
+        NavigationView {
+            Text("Emergency Contacts List/Editor")
+                .navigationTitle("Emergency Contacts")
+                .navigationBarTitleDisplayMode(.inline)
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
         }
     }
 }

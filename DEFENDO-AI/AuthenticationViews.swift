@@ -72,6 +72,14 @@ struct AuthenticationContainerView: View {
                             showingLogin = true
                         }
                         .buttonStyle(SecondaryButtonStyle())
+<<<<<<< HEAD
+=======
+                        
+                        Button("Continue as Guest") {
+                            // Handle guest mode
+                        }
+                        .buttonStyle(TextButtonStyle())
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
                     }
                     .padding(.horizontal, 30)
                     

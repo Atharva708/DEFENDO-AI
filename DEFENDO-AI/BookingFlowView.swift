@@ -70,6 +70,7 @@ struct BookingFlowView: View {
                                 currentStep += 1
                             }
                         } else {
+<<<<<<< HEAD
                             // Handle booking confirmation and payment
                             processBooking()
                         }
@@ -78,6 +79,16 @@ struct BookingFlowView: View {
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(!canProceedToNextStep())
+=======
+                            // Handle booking confirmation
+                            appState.currentScreen = .dashboard
+                        }
+                    }) {
+                        Text(currentStep == 3 ? "Confirm" : "Next")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(currentStep == 0 && selectedService == nil)
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
                 }
                 .padding()
             }
@@ -88,6 +99,7 @@ struct BookingFlowView: View {
             })
         }
     }
+<<<<<<< HEAD
     
     private func canProceedToNextStep() -> Bool {
         switch currentStep {
@@ -152,6 +164,8 @@ struct BookingFlowView: View {
         // This would typically involve an API call
         print("Booking saved: \(booking.id)")
     }
+=======
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
 }
 
 // MARK: - Progress Bar

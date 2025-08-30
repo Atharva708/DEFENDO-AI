@@ -26,9 +26,12 @@ class AppState: ObservableObject {
     @Published var currentScreen: Screen = .dashboard
     @Published var userRole: UserRole = .user
     
+<<<<<<< HEAD
     /// The provider selected in the Marketplace to pass to the Booking flow
     @Published var selectedProviderForBooking: MarketplaceProvider? = nil
     
+=======
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
     init() {
         // Initialize with default values
     }

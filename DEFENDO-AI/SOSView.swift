@@ -227,7 +227,10 @@ struct SOSView: View {
         }
         .sheet(isPresented: $showingEmergencyContacts) {
             EmergencyContactsView()
+<<<<<<< HEAD
                 .environmentObject(emergencyContactService)
+=======
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
         }
         .alert("Location Permission Required", isPresented: $showingLocationPermission) {
             Button("Settings") {

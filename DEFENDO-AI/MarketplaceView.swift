@@ -186,7 +186,10 @@ struct ProviderListingCard: View {
             
             // Action Button
             Button("Book Now") {
+<<<<<<< HEAD
                 appState.selectedProviderForBooking = provider  // Pass provider to booking
+=======
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
                 appState.currentScreen = .booking
             }
             .frame(maxWidth: .infinity)
@@ -296,12 +299,15 @@ struct FilterView: View {
     }
 }
 
+<<<<<<< HEAD
 // NOTE: In AppState, please add the following property to support booking selection:
 //
 // @Published var selectedProviderForBooking: MarketplaceProvider?
 //
 // This property should be set before navigating to the booking screen, as done in ProviderListingCard.
 
+=======
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
 #Preview {
     MarketplaceView()
         .environmentObject(AppState())

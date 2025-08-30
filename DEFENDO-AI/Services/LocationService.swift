@@ -37,12 +37,18 @@ class LocationService: NSObject, ObservableObject {
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
+<<<<<<< HEAD
         locationManager.distanceFilter = 5 // Update every 5 meters for better accuracy
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
         
         // Request location permission immediately
         requestLocationPermission()
+=======
+        locationManager.distanceFilter = 10 // Update every 10 meters
+        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.pausesLocationUpdatesAutomatically = false
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
     }
     
     private func startLocationTimer() {
@@ -57,6 +63,7 @@ class LocationService: NSObject, ObservableObject {
     }
     
     func requestLocationPermission() {
+<<<<<<< HEAD
         switch authorizationStatus {
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
@@ -68,6 +75,9 @@ class LocationService: NSObject, ObservableObject {
         @unknown default:
             locationManager.requestWhenInUseAuthorization()
         }
+=======
+        locationManager.requestWhenInUseAuthorization()
+>>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
     }
     
     func startLocationTracking() {
