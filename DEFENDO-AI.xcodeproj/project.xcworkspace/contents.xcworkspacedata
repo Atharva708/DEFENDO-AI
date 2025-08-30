@@ -4,10 +4,4 @@
    <FileRef
       location = "self:">
    </FileRef>
-<<<<<<< HEAD
-=======
-   <FileRef
-      location = "group:PlistInfoHelper.swift">
-   </FileRef>
->>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
 </Workspace>

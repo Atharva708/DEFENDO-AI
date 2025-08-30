@@ -159,7 +159,6 @@ class EmergencyContactService: ObservableObject {
         // Return contacts marked as emergency contacts or all contacts if none marked
         return emergencyContacts
     }
-<<<<<<< HEAD
     
     func getCurrentLocation() -> String? {
         // This would typically get location from LocationService
@@ -171,6 +170,4 @@ class EmergencyContactService: ObservableObject {
         // This would get the actual location string from LocationService
         return "Current Location"
     }
-=======
->>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
 }

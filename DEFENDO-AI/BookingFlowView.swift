@@ -70,7 +70,6 @@ struct BookingFlowView: View {
                                 currentStep += 1
                             }
                         } else {
-<<<<<<< HEAD
                             // Handle booking confirmation and payment
                             processBooking()
                         }
@@ -79,36 +78,40 @@ struct BookingFlowView: View {
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(!canProceedToNextStep())
-=======
-                            // Handle booking confirmation
-                            appState.currentScreen = .dashboard
-                        }
-                    }) {
-                        Text(currentStep == 3 ? "Confirm" : "Next")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(currentStep == 0 && selectedService == nil)
->>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
                 }
                 .padding()
             }
             .navigationTitle("Book Service")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(leading: Button("Cancel") {
-                appState.currentScreen = .dashboard
-            })
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        appState.currentScreen = .dashboard
+                    }
+                }
+            }
         }
     }
-<<<<<<< HEAD
     
     private func canProceedToNextStep() -> Bool {
         switch currentStep {
         case 0:
-            return selectedService != nil
+            return true // selectedService is always set, no need to check nil
         case 1:
-            return selectedDate > Date() && selectedTime > Date()
+            // Ensure selected date and time are in the future
+            let now = Date()
+            // Combine selectedDate and selectedTime's hour and minute components into one Date for accurate check
+            let calendar = Calendar.current
+            var components = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: selectedTime)
+            components.hour = timeComponents.hour
+            components.minute = timeComponents.minute
+            if let combinedDateTime = calendar.date(from: components) {
+                return combinedDateTime > now
+            }
+            return false
         case 2:
-            return selectedDuration > 0 && !location.isEmpty
+            return selectedDuration > 0 && !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case 3:
             return true // Payment step - always allow proceeding
         default:
@@ -164,8 +167,6 @@ struct BookingFlowView: View {
         // This would typically involve an API call
         print("Booking saved: \(booking.id)")
     }
-=======
->>>>>>> 08c75ea883b9f00010ae8a9cfcd01498718d487c
 }
 
 // MARK: - Progress Bar
@@ -618,6 +619,15 @@ struct ConfirmPaymentView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
+        // Combine selectedDate and selectedTime for accurate display
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: selectedTime)
+        components.hour = timeComponents.hour
+        components.minute = timeComponents.minute
+        if let combinedDate = calendar.date(from: components) {
+            return formatter.string(from: combinedDate)
+        }
         return formatter.string(from: selectedDate)
     }
 }
