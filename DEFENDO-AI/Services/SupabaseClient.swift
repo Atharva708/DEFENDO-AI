@@ -8,5 +8,34 @@
 import Foundation
 import Supabase
 
-let client = SupabaseClient(supabaseURL: URL(string: "https://grmutjpyqzupdoimrtcg.supabase.co")!, supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdybXV0anB5cXp1cGRvaW1ydGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE2MDg3NjQsImV4cCI6MjA2NzE4NDc2NH0.V_a4lnzTIQvWY2aT1et5u9AP7zvz_DFqSRg5LTiyJgw")
+// MARK: - Secure Supabase Client
+class SupabaseManager {
+    static let shared = SupabaseManager()
+    
+    lazy var client: SupabaseClient = {
+        guard let url = URL(string: AppConfig.Supabase.url),
+              !AppConfig.Supabase.anonKey.isEmpty else {
+            fatalError("Supabase configuration is missing. Please check your Info.plist configuration.")
+        }
 
+        let options = SupabaseClientOptions(
+            db: SupabaseClientOptions.DatabaseOptions(schema: "public"),
+            auth: SupabaseClientOptions.AuthOptions(
+                autoRefreshToken: true
+            ),
+            global: SupabaseClientOptions.GlobalOptions(headers: [
+                "x-client-info": "defendo-ai-ios/\(AppConfig.appVersion)"
+            ])
+        )
+        return SupabaseClient(
+            supabaseURL: url,
+            supabaseKey: AppConfig.Supabase.anonKey,
+            options: options
+        )
+    }()
+    
+    private init() {}
+}
+
+// Global client instance for backward compatibility
+let client = SupabaseManager.shared.client

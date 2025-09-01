@@ -37,17 +37,16 @@ class LocationService: NSObject, ObservableObject {
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
-
-        locationManager.distanceFilter = 5 // Update every 5 meters for better accuracy
-        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.distanceFilter = 10 // Update every 10 meters
+        
+        // Only set background updates if we have the proper entitlements
+        if Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") != nil {
+            locationManager.allowsBackgroundLocationUpdates = true
+        }
         locationManager.pausesLocationUpdatesAutomatically = false
         
         // Request location permission immediately
         requestLocationPermission()
-
-        locationManager.distanceFilter = 10 // Update every 10 meters
-        locationManager.allowsBackgroundLocationUpdates = true
-        locationManager.pausesLocationUpdatesAutomatically = false
     }
     
     private func startLocationTimer() {
@@ -62,7 +61,6 @@ class LocationService: NSObject, ObservableObject {
     }
     
     func requestLocationPermission() {
-
         switch authorizationStatus {
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
@@ -74,9 +72,6 @@ class LocationService: NSObject, ObservableObject {
         @unknown default:
             locationManager.requestWhenInUseAuthorization()
         }
-
-        locationManager.requestWhenInUseAuthorization()
-
     }
     
     func startLocationTracking() {
@@ -151,6 +146,8 @@ class LocationService: NSObject, ObservableObject {
                 
                 if !address.isEmpty {
                     self?.lastKnownAddress = address
+                } else {
+                    self?.lastKnownAddress = nil
                 }
                 
                 completion(address.isEmpty ? nil : address)
@@ -312,7 +309,7 @@ extension LocationService: CLLocationManagerDelegate {
             // Add to location history
             self.addToLocationHistory(location)
             
-            // Update address
+            // Update address immediately with completion to update lastKnownAddress and notify observers
             self.getAddressFromLocation { _ in }
             
             // Fetch nearby incidents periodically

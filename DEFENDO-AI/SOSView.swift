@@ -29,6 +29,9 @@ struct SOSView: View {
     @State private var emergencyLocationData: [String: Any] = [:]
     @State private var cancellables = Set<AnyCancellable>()
     
+    @State private var escalationTimerCancellable: AnyCancellable?
+    @State private var isEscalated = false
+    
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -95,6 +98,12 @@ struct SOSView: View {
                                 .font(.title)
                                 .fontWeight(.bold)
                                 .foregroundColor(.red)
+                            
+                            if isEscalated {
+                                Text("Escalation in progress")
+                                    .font(.subheadline)
+                                    .foregroundColor(.orange)
+                            }
                         }
                     } else {
                         // Inactive SOS State
@@ -228,8 +237,6 @@ struct SOSView: View {
         .sheet(isPresented: $showingEmergencyContacts) {
             EmergencyContactsView()
                 .environmentObject(emergencyContactService)
-
-
         }
         .alert("Location Permission Required", isPresented: $showingLocationPermission) {
             Button("Settings") {
@@ -251,6 +258,7 @@ struct SOSView: View {
         
         isSOSActive = true
         timeRemaining = 300
+        isEscalated = false
         currentAlertId = UUID().uuidString
         
         // Get emergency location data
@@ -332,11 +340,60 @@ struct SOSView: View {
         if !locationService.isTrackingLocation {
             locationService.startLocationTracking()
         }
+        
+        // Start escalation timer (10 seconds)
+        escalationTimerCancellable = Timer.publish(every: 10, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                escalationTimerCancellable?.cancel()
+                escalationTimerCancellable = nil
+                escalateSOS()
+            }
+    }
+    
+    private func escalateSOS() {
+        guard isSOSActive && !isEscalated else { return }
+        isEscalated = true
+        
+        // Obtain current location and address at escalation time
+        guard let currentLocation = locationService.currentLocation else {
+            print("Escalation failed: current location unavailable")
+            return
+        }
+        
+        let currentAddress = locationService.lastKnownAddress ?? "Unknown location"
+        let locationString = locationService.getLocationString()
+        
+        // Call the first emergency contact if available
+        if let firstContact = emergencyContactService.emergencyContacts.first {
+            emergencyContactService.callEmergencyContact(firstContact)
+        }
+        
+        // Send SMS to all emergency contacts with current location and address
+        let escalationMessage = """
+        Escalation Alert - Immediate attention required!
+        
+        Location: \(currentAddress)
+        Coordinates: \(currentLocation.coordinate.latitude), \(currentLocation.coordinate.longitude)
+        Time: \(Date().formatted(date: .abbreviated, time: .shortened))
+        """
+        
+        emergencyContactService.notifyAllEmergencyContacts(
+            location: locationString,
+            message: escalationMessage
+        )
+        
+        print("SOS escalation triggered: called first emergency contact and sent SMS to all contacts.")
     }
     
     private func cancelSOS() {
         isSOSActive = false
         timeRemaining = 300
+        isEscalated = false
+        
+        // Cancel escalation timer if active
+        escalationTimerCancellable?.cancel()
+        escalationTimerCancellable = nil
         
         if let alertId = currentAlertId {
             apiService.updateSOSStatus(alertId: alertId, status: .cancelled)
@@ -405,3 +462,4 @@ struct SafeWordInputView: View {
     SOSView()
         .environmentObject(AppState())
 }
+

@@ -11,8 +11,13 @@ import CoreLocation
 import UIKit
 
 class APIService: ObservableObject {
-    private let baseURL = "https://api.securenow.com/v1" // Replace with your actual API URL
-    private let session = URLSession.shared
+    private let baseURL = AppConfig.API.baseURL
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = AppConfig.API.timeout
+        config.timeoutIntervalForResource = AppConfig.API.timeout * 2
+        return URLSession(configuration: config)
+    }()
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - SOS Emergency API
@@ -190,8 +195,7 @@ class APIService: ObservableObject {
     
     // MARK: - Helper Methods
     private func getAuthToken() -> String {
-        // In production, this would get the token from secure storage
-        return UserDefaults.standard.string(forKey: "auth_token") ?? ""
+        return KeychainManager.shared.getAuthToken() ?? ""
     }
     
     private func getDeviceInfo() -> DeviceInfo {

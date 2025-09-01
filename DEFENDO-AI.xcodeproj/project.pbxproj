@@ -13,6 +13,11 @@
 		1C9BC8782E49C94A00B17630 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8772E49C94A00B17630 /* Realtime */; };
 		1C9BC87A2E49C94A00B17630 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC8792E49C94A00B17630 /* Storage */; };
 		1C9BC87C2E49C94A00B17630 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 1C9BC87B2E49C94A00B17630 /* Supabase */; };
+		B8741C7C2E65D6EB004292FB /* Adapty in Frameworks */ = {isa = PBXBuildFile; productRef = B8741C7B2E65D6EB004292FB /* Adapty */; };
+		B8741C7E2E65D6EB004292FB /* AdaptyPlugin in Frameworks */ = {isa = PBXBuildFile; productRef = B8741C7D2E65D6EB004292FB /* AdaptyPlugin */; };
+		B8741C802E65D6EB004292FB /* AdaptyUI in Frameworks */ = {isa = PBXBuildFile; productRef = B8741C7F2E65D6EB004292FB /* AdaptyUI */; };
+		B8741C822E65D6EB004292FB /* AdaptyUITesting in Frameworks */ = {isa = PBXBuildFile; productRef = B8741C812E65D6EB004292FB /* AdaptyUITesting */; };
+		B8D70F452E648C6C003610D8 /* RazorpayCheckout in Frameworks */ = {isa = PBXBuildFile; productRef = B8D70F442E648C6C003610D8 /* RazorpayCheckout */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,11 +80,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				1C9BC8762E49C94A00B17630 /* PostgREST in Frameworks */,
+				B8741C7C2E65D6EB004292FB /* Adapty in Frameworks */,
+				B8741C7E2E65D6EB004292FB /* AdaptyPlugin in Frameworks */,
 				1C9BC8742E49C94A00B17630 /* Functions in Frameworks */,
+				B8D70F452E648C6C003610D8 /* RazorpayCheckout in Frameworks */,
 				1C9BC87C2E49C94A00B17630 /* Supabase in Frameworks */,
 				1C9BC8722E49C94A00B17630 /* Auth in Frameworks */,
 				1C9BC87A2E49C94A00B17630 /* Storage in Frameworks */,
 				1C9BC8782E49C94A00B17630 /* Realtime in Frameworks */,
+				B8741C802E65D6EB004292FB /* AdaptyUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -94,6 +103,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B8741C822E65D6EB004292FB /* AdaptyUITesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -146,6 +156,10 @@
 				1C9BC8772E49C94A00B17630 /* Realtime */,
 				1C9BC8792E49C94A00B17630 /* Storage */,
 				1C9BC87B2E49C94A00B17630 /* Supabase */,
+				B8D70F442E648C6C003610D8 /* RazorpayCheckout */,
+				B8741C7B2E65D6EB004292FB /* Adapty */,
+				B8741C7D2E65D6EB004292FB /* AdaptyPlugin */,
+				B8741C7F2E65D6EB004292FB /* AdaptyUI */,
 			);
 			productName = "DEFENDO-AI";
 			productReference = 1CD74F832E45DC5400DFEA0D /* DEFENDO-AI.app */;
@@ -192,6 +206,7 @@
 			);
 			name = "DEFENDO-AIUITests";
 			packageProductDependencies = (
+				B8741C812E65D6EB004292FB /* AdaptyUITesting */,
 			);
 			productName = "DEFENDO-AIUITests";
 			productReference = 1CD74F9A2E45DC5A00DFEA0D /* DEFENDO-AIUITests.xctest */;
@@ -231,6 +246,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				B8D70F432E648C6C003610D8 /* XCRemoteSwiftPackageReference "razorpay-pod" */,
+				B8741C7A2E65D6EB004292FB /* XCRemoteSwiftPackageReference "AdaptySDK-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1CD74F842E45DC5400DFEA0D /* Products */;
@@ -635,6 +652,22 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		B8741C7A2E65D6EB004292FB /* XCRemoteSwiftPackageReference "AdaptySDK-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/adaptyteam/AdaptySDK-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.11.0;
+			};
+		};
+		B8D70F432E648C6C003610D8 /* XCRemoteSwiftPackageReference "razorpay-pod" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/razorpay/razorpay-pod.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.4.4;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -667,6 +700,31 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1C9BC8702E49C94A00B17630 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		B8741C7B2E65D6EB004292FB /* Adapty */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B8741C7A2E65D6EB004292FB /* XCRemoteSwiftPackageReference "AdaptySDK-iOS" */;
+			productName = Adapty;
+		};
+		B8741C7D2E65D6EB004292FB /* AdaptyPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B8741C7A2E65D6EB004292FB /* XCRemoteSwiftPackageReference "AdaptySDK-iOS" */;
+			productName = AdaptyPlugin;
+		};
+		B8741C7F2E65D6EB004292FB /* AdaptyUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B8741C7A2E65D6EB004292FB /* XCRemoteSwiftPackageReference "AdaptySDK-iOS" */;
+			productName = AdaptyUI;
+		};
+		B8741C812E65D6EB004292FB /* AdaptyUITesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B8741C7A2E65D6EB004292FB /* XCRemoteSwiftPackageReference "AdaptySDK-iOS" */;
+			productName = AdaptyUITesting;
+		};
+		B8D70F442E648C6C003610D8 /* RazorpayCheckout */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B8D70F432E648C6C003610D8 /* XCRemoteSwiftPackageReference "razorpay-pod" */;
+			productName = RazorpayCheckout;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

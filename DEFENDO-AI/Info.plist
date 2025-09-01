@@ -2,10 +2,83 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Background Modes -->
 	<key>UIBackgroundModes</key>
 	<array>
-		<string></string>
 		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
 	</array>
+	
+	<!-- Location Permissions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SecureNow needs location access to provide emergency services and safety monitoring.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>SecureNow needs location access to provide continuous safety monitoring and emergency response services.</string>
+	
+	<!-- Contacts Permission -->
+	<key>NSContactsUsageDescription</key>
+	<string>SecureNow needs access to your contacts to set up emergency contacts for SOS alerts.</string>
+	
+	<!-- Camera Permission (for future incident reporting) -->
+	<key>NSCameraUsageDescription</key>
+	<string>SecureNow needs camera access to take photos for incident reports.</string>
+	
+	<!-- Microphone Permission (for future voice SOS) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SecureNow needs microphone access for voice-activated emergency alerts.</string>
+	
+	<!-- Photo Library Permission -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SecureNow needs photo library access to attach images to incident reports.</string>
+	
+	<!-- Supabase Configuration - Development -->
+	<key>SUPABASE_URL_DEV</key>
+	<string>https://grmutjpyqzupdoimrtcg.supabase.co</string>
+	<key>SUPABASE_ANON_KEY_DEV</key>
+	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdybXV0anB5cXp1cGRvaW1ydGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE2MDg3NjQsImV4cCI6MjA2NzE4NDc2NH0.V_a4lnzTIQvWY2aT1et5u9AP7zvz_DFqSRg5LTiyJgw</string>
+	
+	<!-- Supabase Configuration - Staging -->
+	<key>SUPABASE_URL_STAGING</key>
+	<string>https://staging-grmutjpyqzupdoimrtcg.supabase.co</string>
+	<key>SUPABASE_ANON_KEY_STAGING</key>
+	<string>YOUR_STAGING_ANON_KEY_HERE</string>
+	
+	<!-- Supabase Configuration - Production -->
+	<key>SUPABASE_URL_PROD</key>
+	<string>https://prod-grmutjpyqzupdoimrtcg.supabase.co</string>
+	<key>SUPABASE_ANON_KEY_PROD</key>
+	<string>YOUR_PRODUCTION_ANON_KEY_HERE</string>
+	
+	<!-- App Transport Security -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>supabase.co</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	
+	<!-- App Icon Configuration -->
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>AppIcon</string>
+			</array>
+		</dict>
+	</dict>
 </dict>
 </plist>

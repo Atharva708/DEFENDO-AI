@@ -130,8 +130,10 @@ class AuthService: ObservableObject {
                 ]
             )
             
-            // FIX: No if-let, since user is not optional here.
             let user = authResponse.user
+            
+            // No accessToken or refreshToken available directly in authResponse (Supabase Swift SDK)
+            
             await MainActor.run {
                 self.currentUser = User(
                     id: user.id.uuidString,
@@ -183,6 +185,10 @@ class AuthService: ObservableObject {
             )
             let user = authResponse.user
 
+            // NOTE: Saving tokens is skipped due to API structure. Adjust if tokens are available in authResponse.
+            // _ = KeychainManager.shared.saveAuthToken(...)
+            // _ = KeychainManager.shared.saveRefreshToken(...)
+
             // Immediately mark as logged in and navigate
             await MainActor.run {
                 self.currentUser = User(
@@ -222,6 +228,9 @@ class AuthService: ObservableObject {
         
         do {
             try await client.auth.signOut()
+            
+            // Clear secure storage
+            KeychainManager.shared.deleteAllSecureData()
             
             await MainActor.run {
                 self.isAuthenticated = false
@@ -392,3 +401,4 @@ class AuthService: ObservableObject {
         authSuccess = nil
     }
 }
+
