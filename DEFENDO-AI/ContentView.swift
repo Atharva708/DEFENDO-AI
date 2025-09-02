@@ -102,13 +102,12 @@ struct OnboardingView: View {
 // MARK: - SOS Floating Button
 struct SOSFloatingButton: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var locationService: LocationService
     @EnvironmentObject var emergencyContactService: EmergencyContactService
-    @State private var showingSOSAlert = false
-    @State private var isCountdownActive = false
-    @State private var countdown = 10
-    @State private var timer: Timer? = nil
-    @State private var sosSent = false
+    @EnvironmentObject var apiService: APIService
+    @State private var showingSOSView = false
 
     var body: some View {
         VStack {
@@ -116,24 +115,7 @@ struct SOSFloatingButton: View {
             HStack {
                 Spacer()
                 Button(action: {
-                    showingSOSAlert = true
-                    countdown = 10
-                    isCountdownActive = true
-                    sosSent = false
-
-                    timer?.invalidate()
-                    timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                        if countdown > 0 {
-                            countdown -= 1
-                        } else {
-                            timer?.invalidate()
-                            isCountdownActive = false
-                            if !sosSent {
-                                triggerSOS()
-                                sosSent = true
-                            }
-                        }
-                    }
+                    showingSOSView = true
                 }) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.title2)
@@ -145,43 +127,17 @@ struct SOSFloatingButton: View {
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 100)
-                .alert(isPresented: $showingSOSAlert) {
-                    if isCountdownActive {
-                        return Alert(
-                            title: Text("Emergency SOS"),
-                            message: Text("Sending SOS in \(countdown)s. Tap Cancel to stop."),
-                            primaryButton: .destructive(Text("Cancel")) {
-                                timer?.invalidate()
-                                isCountdownActive = false
-                                showingSOSAlert = false
-                            },
-                            secondaryButton: .default(Text("Send Now")) {
-                                timer?.invalidate()
-                                isCountdownActive = false
-                                if !sosSent {
-                                    triggerSOS()
-                                    sosSent = true
-                                }
-                            }
-                        )
-                    } else {
-                        return Alert(
-                            title: Text("SOS Sent"),
-                            message: Text("Emergency contacts have been notified."),
-                            dismissButton: .default(Text("OK")) {
-                                showingSOSAlert = false
-                            }
-                        )
-                    }
+                .sheet(isPresented: $showingSOSView) {
+                    SOSView()
+                        .environmentObject(appState)
+                        .environmentObject(authService)
+                        .environmentObject(notificationService)
+                        .environmentObject(locationService)
+                        .environmentObject(emergencyContactService)
+                        .environmentObject(apiService)
                 }
             }
         }
-    }
-
-    private func triggerSOS() {
-        let locationString = locationService.getLocationString()
-        let message = "SOS Emergency Alert! Please check on me immediately. Location: \(locationString)"
-        emergencyContactService.notifyAllEmergencyContacts(location: locationString, message: message)
     }
 }
 

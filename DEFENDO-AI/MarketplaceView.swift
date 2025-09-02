@@ -7,11 +7,21 @@
 
 import SwiftUI
 
+enum ActiveSheet: Identifiable {
+    case filters, booking(MarketplaceProvider)
+    var id: String {
+        switch self {
+        case .filters: return "filters"
+        case .booking(let provider): return provider.id
+        }
+    }
+}
+
 struct MarketplaceView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedCategory = "Guards"
-    @State private var showingFilters = false
     @State private var searchText = ""
+    @State private var activeSheet: ActiveSheet? = nil
     
     let categories = ["Guards", "Drones", "Studios", "Agencies"]
     
@@ -56,7 +66,10 @@ struct MarketplaceView: View {
                 ScrollView {
                     LazyVStack(spacing: 15) {
                         ForEach(getProviders(for: selectedCategory), id: \.id) { provider in
-                            ProviderListingCard(provider: provider)
+                            ProviderListingCard(provider: provider, onBookNow: { selectedProvider in
+                                activeSheet = .booking(selectedProvider)
+                            })
+                            .environmentObject(appState)
                         }
                     }
                     .padding()
@@ -65,10 +78,17 @@ struct MarketplaceView: View {
             .navigationTitle("Marketplace")
             .navigationBarTitleDisplayMode(.large)
             .navigationBarItems(trailing: Button("Filters") {
-                showingFilters = true
+                activeSheet = .filters
             })
-            .sheet(isPresented: $showingFilters) {
-                FilterView()
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .filters:
+                    FilterView()
+                case .booking(_):
+                    BookingFlowView()
+                        .environmentObject(appState)
+                        .environmentObject(AuthService())
+                }
             }
         }
     }
@@ -118,7 +138,13 @@ struct MarketplaceProvider: Identifiable, Codable {
 
 struct ProviderListingCard: View {
     let provider: MarketplaceProvider
+    let onBookNow: ((MarketplaceProvider) -> Void)?
     @EnvironmentObject var appState: AppState
+    
+    init(provider: MarketplaceProvider, onBookNow: ((MarketplaceProvider) -> Void)? = nil) {
+        self.provider = provider
+        self.onBookNow = onBookNow
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -186,8 +212,7 @@ struct ProviderListingCard: View {
             
             // Action Button
             Button("Book Now") {
-
-                appState.currentScreen = .booking
+                onBookNow?(provider)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)

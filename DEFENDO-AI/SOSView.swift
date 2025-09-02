@@ -8,6 +8,28 @@
 import SwiftUI
 import Combine
 import CoreLocation
+import UIKit
+import MessageUI
+
+struct SOSLogEntry: Identifiable {
+    let id = UUID()
+    let timestamp: Date
+    let type: LogType
+    let contactName: String
+    let contactPhone: String
+    let message: String?
+    enum LogType { case sms, call }
+}
+
+struct VisualEffectBlur: UIViewRepresentable {
+    var effect: UIVisualEffect?
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        UIVisualEffectView(effect: effect)
+    }
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
+        uiView.effect = effect
+    }
+}
 
 struct SOSView: View {
     @EnvironmentObject var appState: AppState
@@ -18,7 +40,7 @@ struct SOSView: View {
     @EnvironmentObject var apiService: APIService
     
     @State private var isSOSActive = false
-    @State private var timeRemaining = 300 // 5 minutes in seconds
+    @State private var timeRemaining = 15 // 5 minutes in seconds
     @State private var safeWord = ""
     @State private var showingSafeWordInput = false
     @State private var dragOffset = CGSize.zero
@@ -32,203 +54,277 @@ struct SOSView: View {
     @State private var escalationTimerCancellable: AnyCancellable?
     @State private var isEscalated = false
     
+    @State private var pulse = false
+    
+    @State private var sosLogs: [SOSLogEntry] = []
+    
+    // Added states for showing message composer
+    @State private var showingMessageComposer = false
+    @State private var messageRecipients: [String] = []
+    @State private var emergencyMessage: String = ""
+    
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    private let totalTime = 15
     
     var body: some View {
         ZStack {
-            // Background
-            Color.black
+            // Animated Red Gradient Background with blur overlay and vignette
+            LinearGradient(
+                gradient: Gradient(colors: [Color.red, Color.orange.opacity(0.7)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
                 .ignoresSafeArea()
             
-            VStack(spacing: 30) {
-                // Header
+            // Subtle vignette overlay for depth
+            Color.black.opacity(0.35)
+                .blendMode(.multiply)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 40) {
+                // Header with floating glassy capsules for buttons & breathing room around title
                 HStack {
-                    Button("Cancel") {
+                    Button(action: {
                         appState.currentScreen = .dashboard
+                    }) {
+                        Text("Cancel")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(
+                                VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: Color.red.opacity(0.7), radius: 8, x: 0, y: 2)
                     }
-                    .foregroundColor(.white)
+                    .fixedSize()
                     
                     Spacer()
                     
-                    VStack(spacing: 2) {
+                    VStack(spacing: 6) {
                         Text("EMERGENCY SOS")
-                            .font(.headline)
+                            .font(.largeTitle)
+                            .fontWeight(.heavy)
                             .foregroundColor(.white)
+                            .shadow(color: Color.red.opacity(0.9), radius: 4, x: 0, y: 0)
+                            .padding(.bottom, 4)
                         
                         if let user = authService.currentUser {
                             Text(user.name)
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                                .font(.subheadline)
+                                .foregroundColor(Color.white.opacity(0.7))
+                                .shadow(color: Color.black.opacity(0.7), radius: 1, x: 0, y: 0)
                         }
                     }
                     
                     Spacer()
                     
-                    Button("Safe Word") {
+                    Button(action: {
                         showingSafeWordInput = true
+                    }) {
+                        Text("Safe Word")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(
+                                VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .shadow(color: Color.red.opacity(0.7), radius: 8, x: 0, y: 2)
                     }
-                    .foregroundColor(.white)
+                    .fixedSize()
                 }
-                .padding()
+                .padding(.horizontal, 30)
+                .padding(.top, 20)
                 
                 Spacer()
                 
-                // Main SOS Button
-                VStack(spacing: 20) {
-                    if isSOSActive {
-                        // Active SOS State
-                        VStack(spacing: 15) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.red)
-                                .scaleEffect(isSOSActive ? 1.2 : 1.0)
-                                .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: isSOSActive)
-                            
-                            Text("SOS ACTIVATED")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.red)
-                            
-                            Text("Emergency services notified")
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                            
-                            // Countdown Timer
-                            Text(timeString(from: timeRemaining))
-                                .font(.title)
-                                .fontWeight(.bold)
-                                .foregroundColor(.red)
-                            
-                            if isEscalated {
-                                Text("Escalation in progress")
-                                    .font(.subheadline)
-                                    .foregroundColor(.orange)
-                            }
-                        }
-                    } else {
-                        // Inactive SOS State
-                        VStack(spacing: 20) {
-                            Text("EMERGENCY SOS")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                            
-                            Text("Tap to activate emergency response")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                            
-                            // SOS Button
-                            Button(action: {
-                                activateSOS()
-                            }) {
-                                VStack(spacing: 10) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(.white)
-                                    
-                                    Text("SOS")
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
+                // Main SOS Button & Status Area with glassy background card (VisualEffectBlur)
+                VStack(spacing: 25) {
+                    VisualEffectBlur(effect: UIBlurEffect(style: .systemMaterialDark))
+                        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                        )
+                        .shadow(color: Color.red.opacity(0.8), radius: 20, x: 0, y: 10)
+                        .overlay(
+                            Group {
+                                if isSOSActive {
+                                    activeSOSContent
+                                } else {
+                                    inactiveSOSContent
                                 }
-                                .frame(width: 150, height: 150)
-                                .background(
-                                    Circle()
-                                        .fill(Color.red)
-                                        .shadow(color: .red.opacity(0.5), radius: 20)
-                                )
                             }
-                            .scaleEffect(isDragging ? 0.9 : 1.0)
-                            .animation(.easeInOut(duration: 0.2), value: isDragging)
-                        }
-                    }
+                            .padding(40)
+                        )
+                        .padding(.horizontal, 30)
+                    
                 }
                 
                 Spacer()
                 
-                // Emergency Information
+                // Emergency Information (only if active)
                 if isSOSActive {
-                    VStack(spacing: 15) {
-                        // Location Info
+                    VStack(spacing: 18) {
                         if let location = locationService.currentLocation {
-                            VStack(spacing: 5) {
+                            VStack(spacing: 8) {
                                 Text("Your Location")
                                     .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.white.opacity(0.7))
                                 
                                 Text(locationService.lastKnownAddress ?? "Unknown location")
                                     .font(.subheadline)
                                     .foregroundColor(.white)
                                     .multilineTextAlignment(.center)
                             }
-                            .padding()
+                            .padding(12)
                             .background(Color.red.opacity(0.3))
-                            .cornerRadius(8)
+                            .cornerRadius(12)
+                            .shadow(color: Color.red.opacity(0.5), radius: 10, x: 0, y: 5)
                         }
                         
-                        // Emergency Contacts
-                        Button("View Emergency Contacts") {
+                        Button(action: {
                             showingEmergencyContacts = true
+                        }) {
+                            Text("View Emergency Contacts")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 14)
+                                .padding(.horizontal, 40)
+                                .background(
+                                    VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                                        )
+                                )
+                                .shadow(color: Color.blue.opacity(0.8), radius: 12, x: 0, y: 5)
                         }
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.blue.opacity(0.3))
-                        .cornerRadius(8)
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 30)
                 }
                 
-                // Slide to Cancel
+                // Slide to Cancel with glassy background, bolder handle, pulsing animation
                 if isSOSActive {
-                    VStack(spacing: 15) {
+                    VStack(spacing: 18) {
                         Text("Slide to cancel emergency")
                             .font(.caption)
-                            .foregroundColor(.gray)
+                            .foregroundColor(Color.white.opacity(0.7))
+                            .padding(.bottom, 6)
                         
                         ZStack {
-                            RoundedRectangle(cornerRadius: 25)
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 200, height: 50)
+                            VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                                .frame(width: 260, height: 60)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
+                                .shadow(color: Color.red.opacity(0.6), radius: 12, x: 0, y: 6)
                             
                             HStack {
                                 RoundedRectangle(cornerRadius: 25)
                                     .fill(Color.white)
-                                    .frame(width: 50, height: 50)
+                                    .frame(width: 60, height: 60)
+                                    .shadow(color: Color.red.opacity(0.8), radius: 15, x: 0, y: 0)
+                                    .scaleEffect(isDragging ? 0.95 : 1.0)
                                     .offset(x: dragOffset.width)
+                                    .overlay(
+                                        Image(systemName: "hand.point.right.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(Color.red)
+                                    )
+                                    .opacity(pulse ? 0.85 : 1)
+                                    .animation(
+                                        Animation.easeInOut(duration: 1.2)
+                                            .repeatForever(autoreverses: true),
+                                        value: pulse
+                                    )
                                     .gesture(
                                         DragGesture()
                                             .onChanged { value in
                                                 dragOffset = value.translation
                                                 isDragging = true
                                             }
-                                            .onEnded { value in
-                                                if dragOffset.width > 100 {
+                                            .onEnded { _ in
+                                                if dragOffset.width > 130 {
                                                     cancelSOS()
                                                 }
                                                 dragOffset = .zero
                                                 isDragging = false
                                             }
                                     )
+                                    .onAppear {
+                                        pulse = true
+                                    }
                                 
                                 Spacer()
                             }
-                            .frame(width: 200, height: 50)
+                            .frame(width: 260, height: 60)
                             
                             Text("Cancel")
-                                .font(.caption)
-                                .foregroundColor(.black)
-                                .offset(x: dragOffset.width)
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(Color.white.opacity(0.85))
+                                .offset(x: dragOffset.width / 2)
+                                .shadow(color: Color.black.opacity(0.7), radius: 2, x: 0, y: 1)
                         }
                     }
+                    .padding(.bottom, 30)
                 }
                 
-                Spacer()
+                if !sosLogs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recent Emergency Actions")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        ForEach(sosLogs.sorted(by: { $0.timestamp > $1.timestamp })) { log in
+                            HStack(alignment: .top) {
+                                Image(systemName: log.type == .call ? "phone.fill" : "message.fill")
+                                    .foregroundColor(log.type == .call ? .green : .blue)
+                                VStack(alignment: .leading) {
+                                    Text("\(log.contactName) (\(log.contactPhone))")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white)
+                                    Text(log.type == .call ? "Call successful" : "Text sent: \(log.message ?? "")")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.7))
+                                    Text(log.timestamp, style: .time)
+                                        .font(.caption2)
+                                        .foregroundColor(.white.opacity(0.5))
+                                }
+                            }
+                            .padding(6)
+                            .background(Color.black.opacity(0.25))
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal, 30)
+                }
             }
         }
         .onReceive(timer) { _ in
             if isSOSActive && timeRemaining > 0 {
                 timeRemaining -= 1
+            }
+            if isSOSActive && timeRemaining == 0 {
+                notifyAllContactsOnTimerEnd()
             }
         }
         .sheet(isPresented: $showingSafeWordInput) {
@@ -247,8 +343,130 @@ struct SOSView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("SecureNow needs location access to provide emergency services. Please enable location access in Settings.")
+                .foregroundColor(.white)
+        }
+        .sheet(isPresented: $showingMessageComposer) {
+            // Due to iOS privacy restrictions, user must manually send the SMS when presented
+            MessageComposeView(recipients: messageRecipients, body: emergencyMessage)
         }
     }
+    
+    // MARK: - Active SOS Content View
+    
+    @ViewBuilder
+    private var activeSOSContent: some View {
+        VStack(spacing: 25) {
+            // Glowing animated icon
+            ZStack {
+                Circle()
+                    .fill(Color.red.opacity(0.4))
+                    .frame(width: 140, height: 140)
+                    .blur(radius: 15)
+                    .opacity(isSOSActive ? 1 : 0)
+                    .animation(
+                        Animation.easeInOut(duration: 1.4)
+                            .repeatForever(autoreverses: true),
+                        value: isSOSActive
+                    )
+                
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 90))
+                    .foregroundColor(.red)
+                    .shadow(color: Color.red.opacity(0.9), radius: 20, x: 0, y: 0)
+            }
+            
+            Text("SOS ACTIVATED")
+                .font(.title2)
+                .fontWeight(.heavy)
+                .foregroundColor(Color.red.opacity(0.95))
+                .shadow(color: Color.red.opacity(0.8), radius: 6, x: 0, y: 0)
+            
+            Text("Emergency services notified")
+                .font(.subheadline)
+                .foregroundColor(Color.white.opacity(0.85))
+            
+            // Circular Progress Indicator with numeric timer in center
+            ZStack {
+                Circle()
+                    .stroke(Color.red.opacity(0.3), lineWidth: 14)
+                    .frame(width: 130, height: 130)
+                
+                Circle()
+                    .trim(from: 0, to: CGFloat(timeRemaining) / CGFloat(totalTime))
+                    .stroke(
+                        AngularGradient(
+                            gradient: Gradient(colors: [Color.red, Color.orange]),
+                            center: .center,
+                            startAngle: .degrees(0),
+                            endAngle: .degrees(360)
+                        ),
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 130, height: 130)
+                    .animation(.linear(duration: 1), value: timeRemaining)
+                
+                Text(timeString(from: timeRemaining))
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(Color.red)
+                    .shadow(color: Color.red.opacity(0.9), radius: 4, x: 0, y: 0)
+            }
+            
+            if isEscalated {
+                Text("Escalation in progress")
+                    .font(.subheadline)
+                    .foregroundColor(Color.orange.opacity(0.85))
+                    .fontWeight(.semibold)
+                    .shadow(color: Color.orange.opacity(0.75), radius: 6, x: 0, y: 0)
+            }
+        }
+    }
+    
+    // MARK: - Inactive SOS Content View
+    
+    @ViewBuilder
+    private var inactiveSOSContent: some View {
+        VStack(spacing: 30) {
+            Text("EMERGENCY SOS")
+                .font(.title)
+                .fontWeight(.heavy)
+                .foregroundColor(.white)
+            
+            Text("Tap to activate emergency response")
+                .font(.subheadline)
+                .foregroundColor(Color.white.opacity(0.75))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+            
+            // SOS Button with glowing ring and bigger icon
+            Button(action: {
+                activateSOS()
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 170, height: 170)
+                        .shadow(color: Color.red.opacity(0.7), radius: 30, x: 0, y: 10)
+                    
+                    Circle()
+                        .stroke(Color.red.opacity(isDragging ? 0.9 : 0), lineWidth: 8)
+                        .frame(width: 190, height: 190)
+                        .scaleEffect(isDragging ? 1.2 : 1.0)
+                        .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: isDragging)
+                    
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.white)
+                        .shadow(color: Color.white.opacity(0.9), radius: 10, x: 0, y: 0)
+                }
+            }
+            .scaleEffect(isDragging ? 0.9 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isDragging)
+        }
+    }
+    
+    // MARK: - Functions
     
     private func activateSOS() {
         guard let location = locationService.getCurrentLocation() else {
@@ -257,7 +475,7 @@ struct SOSView: View {
         }
         
         isSOSActive = true
-        timeRemaining = 300
+        timeRemaining = totalTime
         isEscalated = false
         currentAlertId = UUID().uuidString
         
@@ -298,25 +516,14 @@ struct SOSView: View {
             )
             .store(in: &cancellables)
         
-        // Notify police department
-        apiService.notifyPoliceDepartment(
-            location: location,
-            incidentType: "emergency_sos",
-            description: "SOS Emergency Alert from SecureNow user"
-        )
-        .sink(
-            receiveCompletion: { completion in
-                if case .failure(let error) = completion {
-                    print("Police notification failed: \(error)")
-                }
-            },
-            receiveValue: { response in
-                print("Police notified: \(response.incidentId)")
-            }
-        )
-        .store(in: &cancellables)
+        // Call all emergency contacts immediately
+        for contact in emergencyContactService.emergencyContacts {
+            emergencyContactService.callEmergencyContact(contact)
+            sosLogs.append(SOSLogEntry(timestamp: Date(), type: .call, contactName: contact.name, contactPhone: contact.phone, message: nil))
+        }
+        // Note: iOS requires user confirmation for each call initiated; fully automatic calling without confirmation is not allowed by Apple.
         
-        // Notify emergency contacts with enhanced location data
+        // Prepare emergency message (do not send)
         let emergencyMessage = """
         SOS Emergency Alert - Please check on me immediately
         
@@ -325,10 +532,8 @@ struct SOSView: View {
         Time: \(Date().formatted(date: .abbreviated, time: .shortened))
         """
         
-        emergencyContactService.notifyAllEmergencyContacts(
-            location: locationService.getLocationString(),
-            message: emergencyMessage
-        )
+        // Notify all emergency contacts with message
+        emergencyContactService.notifyAllEmergencyContacts(location: locationService.getLocationString(), message: emergencyMessage)
         
         // Schedule notification
         notificationService.scheduleSOSNotification(
@@ -351,6 +556,44 @@ struct SOSView: View {
             }
     }
     
+    private func notifyAllContactsOnTimerEnd() {
+        guard isSOSActive else { return }
+        guard let currentLocation = locationService.currentLocation else {
+            print("No location available at timer end")
+            return
+        }
+        let currentAddress = locationService.lastKnownAddress ?? "Unknown location"
+        let locationString = locationService.getLocationString()
+        let now = Date()
+        let timerEndMessage = """
+        Final SOS Alert - No response detected. Immediate attention required!
+        \nLocation: \(currentAddress)
+        Coordinates: \(currentLocation.coordinate.latitude), \(currentLocation.coordinate.longitude)
+        Time: \(now.formatted(date: .abbreviated, time: .shortened))
+        """
+        // Call all emergency contacts
+        for contact in emergencyContactService.emergencyContacts {
+            emergencyContactService.callEmergencyContact(contact)
+            sosLogs.append(SOSLogEntry(timestamp: Date(), type: .call, contactName: contact.name, contactPhone: contact.phone, message: nil))
+        }
+        // Note: iOS requires user confirmation for each call initiated; fully automatic calling without confirmation is not allowed by Apple.
+        
+        // Send message to all emergency contacts
+        emergencyContactService.notifyAllEmergencyContacts(location: locationString, message: timerEndMessage)
+        // Note: SMS send is triggered, but actual delivery can't be confirmed programmatically with URL scheme.
+        for contact in emergencyContactService.emergencyContacts {
+            sosLogs.append(SOSLogEntry(timestamp: Date(), type: .sms, contactName: contact.name, contactPhone: contact.phone, message: timerEndMessage))
+        }
+        
+        // Prepare to present message composer for manual SMS sending
+        messageRecipients = emergencyContactService.emergencyContacts.map { $0.phone }
+        emergencyMessage = timerEndMessage
+        showingMessageComposer = true
+        
+        isSOSActive = false
+        isEscalated = true
+    }
+    
     private func escalateSOS() {
         guard isSOSActive && !isEscalated else { return }
         isEscalated = true
@@ -364,10 +607,12 @@ struct SOSView: View {
         let currentAddress = locationService.lastKnownAddress ?? "Unknown location"
         let locationString = locationService.getLocationString()
         
-        // Call the first emergency contact if available
-        if let firstContact = emergencyContactService.emergencyContacts.first {
-            emergencyContactService.callEmergencyContact(firstContact)
+        // Call all emergency contacts
+        for contact in emergencyContactService.emergencyContacts {
+            emergencyContactService.callEmergencyContact(contact)
+            sosLogs.append(SOSLogEntry(timestamp: Date(), type: .call, contactName: contact.name, contactPhone: contact.phone, message: nil))
         }
+        // Note: iOS requires user confirmation for each call initiated; fully automatic calling without confirmation is not allowed by Apple.
         
         // Send SMS to all emergency contacts with current location and address
         let escalationMessage = """
@@ -382,13 +627,17 @@ struct SOSView: View {
             location: locationString,
             message: escalationMessage
         )
+        // Note: SMS send is triggered, but actual delivery can't be confirmed programmatically with URL scheme.
+        for contact in emergencyContactService.emergencyContacts {
+            sosLogs.append(SOSLogEntry(timestamp: Date(), type: .sms, contactName: contact.name, contactPhone: contact.phone, message: escalationMessage))
+        }
         
-        print("SOS escalation triggered: called first emergency contact and sent SMS to all contacts.")
+        print("SOS escalation triggered: called all emergency contacts and sent SMS to all contacts.")
     }
     
     private func cancelSOS() {
         isSOSActive = false
-        timeRemaining = 300
+        timeRemaining = totalTime
         isEscalated = false
         
         // Cancel escalation timer if active
