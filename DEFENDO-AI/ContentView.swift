@@ -258,26 +258,30 @@ struct SafetyScoreCard: View {
 // MARK: - Quick Actions Grid
 struct QuickActionsGrid: View {
     @EnvironmentObject var locationService: LocationService
-    @State private var showingLocationView = false
+    @State private var showingBookingsView = false
+    @State private var showingAlertsView = false
+    @State private var showingEmergencyContactsView = false
     
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 15) {
-            QuickActionCard(icon: "location.fill", title: "Track My Location", color: .blue) {
-                showingLocationView = true
-            }
             QuickActionCard(icon: "calendar", title: "My Bookings", color: .green) {
-                // Handle bookings action
+                showingBookingsView = true
             }
             QuickActionCard(icon: "exclamationmark.triangle.fill", title: "My Alerts", color: .orange) {
-                // Handle alerts action
+                showingAlertsView = true
             }
             QuickActionCard(icon: "person.2.fill", title: "Emergency Contacts", color: .red) {
-                // Handle emergency contacts action
+                showingEmergencyContactsView = true
             }
         }
-        .sheet(isPresented: $showingLocationView) {
-            ProfessionalMapView()
-                .environmentObject(locationService)
+        .sheet(isPresented: $showingBookingsView) {
+            BookingsView()
+        }
+        .sheet(isPresented: $showingAlertsView) {
+            AlertsView()
+        }
+        .sheet(isPresented: $showingEmergencyContactsView) {
+            EmergencyContactsView()
         }
     }
 }
@@ -620,6 +624,13 @@ struct TextButtonStyle: ButtonStyle {
         configuration.label
             .foregroundColor(.secondary)
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+    }
+}
+
+// Placeholder AlertsView as requested
+struct AlertsView: View {
+    var body: some View {
+        Text("My Alerts")
     }
 }
 

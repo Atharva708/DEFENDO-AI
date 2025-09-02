@@ -8,6 +8,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import ContactsUI
 
 // MARK: - CLLocation Wrapper for Identifiable
 
@@ -29,7 +30,7 @@ struct ProfileView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     ProfileHeaderView()
-                    QuickActionsSection()
+                    // Removed QuickActionsSection()
                     SettingsSection(showingSettings: $showingSettings)
                     EmergencyContactsSection(showingEmergencyContacts: $showingEmergencyContacts)
                     SafetySettingsSection()
@@ -47,6 +48,10 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showingEmergencyContacts) {
                 EmergencyContactsView()
+                    .environmentObject(appState)
+                    .environmentObject(authService)
+                    .environmentObject(locationService)
+                   // .environmentObject(emergencyContactService)
             }
             .alert("Sign Out", isPresented: $showingSignOutAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -188,70 +193,7 @@ struct ProfileHeaderView: View {
     }
 }
 
-// -- Quick Actions Section, with dynamic location action --
-struct QuickActionsSection: View {
-    @EnvironmentObject var locationService: LocationService
-    @State private var showingLocationMap = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            Text("Quick Actions")
-                .font(.headline)
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 15) {
-                QuickActionButton(icon: "person.2.fill", title: "Emergency Contacts", color: .red) {
-                    // Action for emergency contacts, e.g. open EmergencyContactsView
-                }
-                QuickActionButton(icon: "location.fill", title: "Track Location", color: .blue) {
-                    showingLocationMap = true
-                }
-                QuickActionButton(icon: "bell.fill", title: "Notifications", color: .orange)
-                QuickActionButton(icon: "shield.fill", title: "Safety Settings", color: .green)
-            }
-        }
-        .sheet(isPresented: $showingLocationMap) {
-            if let userLocation = locationService.currentLocation {
-                let identifiable = IdentifiableLocation(location: userLocation)
-                Map(coordinateRegion: .constant(
-                    MKCoordinateRegion(
-                        center: userLocation.coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                    )
-                ), annotationItems: [identifiable]) { location in
-                    MapMarker(coordinate: location.location.coordinate, tint: .blue)
-                }
-                .ignoresSafeArea()
-            } else {
-                Text("Location unavailable.")
-            }
-        }
-    }
-}
-
-struct QuickActionButton: View {
-    let icon: String
-    let title: String
-    let color: Color
-    var action: (() -> Void)? = nil
-
-    var body: some View {
-        Button(action: { action?() }) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(color)
-                Text(title)
-                    .font(.caption)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(height: 80)
-            .frame(maxWidth: .infinity)
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
+// -- QuickActionsSection removed as per instructions --
 
 // MARK: - Placeholder/Minimal Implementations
 
@@ -319,23 +261,50 @@ struct SignOutSection: View {
 }
 
 struct SettingsView: View {
+    @State private var receiveNotifications = true
+    @State private var shareLocation = true
+    @State private var hideProfileInfo = false
+    @EnvironmentObject var authService: AuthService
+    @Environment(\.dismiss) var dismiss
+    
     var body: some View {
         NavigationView {
-            Text("Settings go here")
-                .navigationTitle("Settings")
-                .navigationBarTitleDisplayMode(.inline)
+            Form {
+                Section(header: Text("Notifications")) {
+                    Toggle("Receive Push Notifications", isOn: $receiveNotifications)
+                }
+                
+                Section(header: Text("Privacy")) {
+                    Toggle("Share Location", isOn: $shareLocation)
+                    Toggle("Hide Profile Information", isOn: $hideProfileInfo)
+                }
+                
+                Section(header: Text("Account Management")) {
+                    Button("Manage Account") {
+                        // Implement account management action
+                    }
+                    .foregroundColor(.blue)
+                    
+                    Button("Delete Account") {
+                        // Implement delete account action
+                    }
+                    .foregroundColor(.red)
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
         }
     }
 }
 
 struct EmergencyContactsView: View {
     @EnvironmentObject var emergencyContactService: EmergencyContactService
-    @State private var showingAddContact = false
-    @State private var newContactName = ""
-    @State private var newContactPhone = ""
-    @State private var newContactRelationship = "Contact"
-    
-    let relationships = ["Contact", "Mother", "Father", "Spouse", "Sibling", "Friend", "Other"]
+    @State private var showingContactPicker = false
     
     var body: some View {
         NavigationView {
@@ -355,8 +324,8 @@ struct EmergencyContactsView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                         
-                        Button("Add Contact") {
-                            showingAddContact = true
+                        Button("Pick from Contacts") {
+                            showingContactPicker = true
                         }
                         .buttonStyle(PrimaryButtonStyle())
                     }
@@ -368,45 +337,33 @@ struct EmergencyContactsView: View {
                         }
                         .onDelete(perform: deleteContact)
                     }
+                    .listStyle(.plain)
                 }
             }
             .navigationTitle("Emergency Contacts")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(
                 leading: Button("Cancel") {
-                    // Dismiss view
+                    // Dismiss view - assume environment dismiss or delegate
                 },
                 trailing: Button("Add") {
-                    showingAddContact = true
+                    showingContactPicker = true
                 }
             )
-            .sheet(isPresented: $showingAddContact) {
-                AddEmergencyContactView(
-                    name: $newContactName,
-                    phone: $newContactPhone,
-                    relationship: $newContactRelationship,
-                    relationships: relationships
-                ) {
-                    addNewContact()
+            .sheet(isPresented: $showingContactPicker) {
+                ContactPickerView { name, phone in
+                    // Immediately add contact after picking
+                    let newContact = EmergencyContact(
+                        id: UUID().uuidString,
+                        name: name,
+                        phone: phone,
+                        relationship: "Contact"
+                    )
+                    emergencyContactService.addEmergencyContact(newContact)
+                    showingContactPicker = false
                 }
             }
         }
-    }
-    
-    private func addNewContact() {
-        let newContact = EmergencyContact(
-            id: UUID().uuidString,
-            name: newContactName,
-            phone: newContactPhone,
-            relationship: newContactRelationship
-        )
-        
-        emergencyContactService.addEmergencyContact(newContact)
-        
-        // Reset form
-        newContactName = ""
-        newContactPhone = ""
-        newContactRelationship = "Contact"
     }
     
     private func deleteContact(offsets: IndexSet) {
@@ -464,22 +421,20 @@ struct EmergencyContactRow: View {
 struct AddEmergencyContactView: View {
     @Binding var name: String
     @Binding var phone: String
-    @Binding var relationship: String
+    @Binding var relationship: String // Though relationship is fixed to "Contact" now, keep for binding compatibility
     let relationships: [String]
+    let onPickContact: () -> Void
     let onSave: () -> Void
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Contact Information")) {
-                    TextField("Full Name", text: $name)
-                    TextField("Phone Number", text: $phone)
-                        .keyboardType(.phonePad)
-                    
-                    Picker("Relationship", selection: $relationship) {
-                        ForEach(relationships, id: \.self) { rel in
-                            Text(rel).tag(rel)
+                Section {
+                    Button(action: { onPickContact() }) {
+                        HStack {
+                            Image(systemName: "person.crop.circle.badge.plus")
+                            Text("Pick from Contacts")
                         }
                     }
                 }
@@ -495,9 +450,32 @@ struct AddEmergencyContactView: View {
                     dismiss()
                 }
                 .disabled(name.isEmpty || phone.isEmpty)
+                .opacity((name.isEmpty || phone.isEmpty) ? 0 : 1)
             )
         }
     }
+}
+
+struct ContactPickerView: UIViewControllerRepresentable {
+    class Coordinator: NSObject, CNContactPickerDelegate {
+        let parent: ContactPickerView
+        init(parent: ContactPickerView) { self.parent = parent }
+        func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
+            guard let phone = contact.phoneNumbers.first?.value.stringValue else { return }
+            let name = "\(contact.givenName) \(contact.familyName)".trimmingCharacters(in: .whitespaces)
+            parent.onSelect(name, phone)
+        }
+        func contactPickerDidCancel(_ picker: CNContactPickerViewController) {}
+    }
+    let onSelect: (String, String) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+    func makeUIViewController(context: Context) -> CNContactPickerViewController {
+        let picker = CNContactPickerViewController()
+        picker.delegate = context.coordinator
+        picker.predicateForEnablingContact = NSPredicate(format: "phoneNumbers.@count > 0")
+        return picker
+    }
+    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context) {}
 }
 
 // -- Preview --
@@ -506,4 +484,5 @@ struct AddEmergencyContactView: View {
         .environmentObject(AppState())
         .environmentObject(AuthService())
         .environmentObject(LocationService())
+        .environmentObject(EmergencyContactService())
 }
