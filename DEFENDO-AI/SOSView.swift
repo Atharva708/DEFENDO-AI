@@ -86,70 +86,7 @@ struct SOSView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 40) {
-                // Header with floating glassy capsules for buttons & breathing room around title
-                HStack {
-                    Button(action: {
-                        appState.currentScreen = .dashboard
-                    }) {
-                        Text("Cancel")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                    )
-                            )
-                            .shadow(color: Color.red.opacity(0.7), radius: 8, x: 0, y: 2)
-                    }
-                    .fixedSize()
-                    
-                    Spacer()
-                    
-                    VStack(spacing: 6) {
-                        Text("EMERGENCY SOS")
-                            .font(.largeTitle)
-                            .fontWeight(.heavy)
-                            .foregroundColor(.white)
-                            .shadow(color: Color.red.opacity(0.9), radius: 4, x: 0, y: 0)
-                            .padding(.bottom, 4)
-                        
-                        if let user = authService.currentUser {
-                            Text(user.name)
-                                .font(.subheadline)
-                                .foregroundColor(Color.white.opacity(0.7))
-                                .shadow(color: Color.black.opacity(0.7), radius: 1, x: 0, y: 0)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        showingSafeWordInput = true
-                    }) {
-                        Text("Safe Word")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
-                            .background(
-                                VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                    )
-                            )
-                            .shadow(color: Color.red.opacity(0.7), radius: 8, x: 0, y: 2)
-                    }
-                    .fixedSize()
-                }
-                .padding(.horizontal, 30)
-                .padding(.top, 20)
+                header
                 
                 Spacer()
                 
@@ -178,145 +115,9 @@ struct SOSView: View {
                 
                 Spacer()
                 
-                // Emergency Information (only if active)
-                if isSOSActive {
-                    VStack(spacing: 18) {
-                        if let location = locationService.currentLocation {
-                            VStack(spacing: 8) {
-                                Text("Your Location")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.7))
-                                
-                                Text(locationService.lastKnownAddress ?? "Unknown location")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding(12)
-                            .background(Color.red.opacity(0.3))
-                            .cornerRadius(12)
-                            .shadow(color: Color.red.opacity(0.5), radius: 10, x: 0, y: 5)
-                        }
-                        
-                        Button(action: {
-                            showingEmergencyContacts = true
-                        }) {
-                            Text("View Emergency Contacts")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.vertical, 14)
-                                .padding(.horizontal, 40)
-                                .background(
-                                    VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
-                                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                                        )
-                                )
-                                .shadow(color: Color.blue.opacity(0.8), radius: 12, x: 0, y: 5)
-                        }
-                    }
-                    .padding(.horizontal, 30)
-                }
-                
-                // Slide to Cancel with glassy background, bolder handle, pulsing animation
-                if isSOSActive {
-                    VStack(spacing: 18) {
-                        Text("Slide to cancel emergency")
-                            .font(.caption)
-                            .foregroundColor(Color.white.opacity(0.7))
-                            .padding(.bottom, 6)
-                        
-                        ZStack {
-                            VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
-                                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                                .frame(width: 260, height: 60)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                                .shadow(color: Color.red.opacity(0.6), radius: 12, x: 0, y: 6)
-                            
-                            HStack {
-                                RoundedRectangle(cornerRadius: 25)
-                                    .fill(Color.white)
-                                    .frame(width: 60, height: 60)
-                                    .shadow(color: Color.red.opacity(0.8), radius: 15, x: 0, y: 0)
-                                    .scaleEffect(isDragging ? 0.95 : 1.0)
-                                    .offset(x: dragOffset.width)
-                                    .overlay(
-                                        Image(systemName: "hand.point.right.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(Color.red)
-                                    )
-                                    .opacity(pulse ? 0.85 : 1)
-                                    .animation(
-                                        Animation.easeInOut(duration: 1.2)
-                                            .repeatForever(autoreverses: true),
-                                        value: pulse
-                                    )
-                                    .gesture(
-                                        DragGesture()
-                                            .onChanged { value in
-                                                dragOffset = value.translation
-                                                isDragging = true
-                                            }
-                                            .onEnded { _ in
-                                                if dragOffset.width > 130 {
-                                                    cancelSOS()
-                                                }
-                                                dragOffset = .zero
-                                                isDragging = false
-                                            }
-                                    )
-                                    .onAppear {
-                                        pulse = true
-                                    }
-                                
-                                Spacer()
-                            }
-                            .frame(width: 260, height: 60)
-                            
-                            Text("Cancel")
-                                .font(.headline)
-                                .fontWeight(.bold)
-                                .foregroundColor(Color.white.opacity(0.85))
-                                .offset(x: dragOffset.width / 2)
-                                .shadow(color: Color.black.opacity(0.7), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                    .padding(.bottom, 30)
-                }
-                
-                if !sosLogs.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Recent Emergency Actions")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        ForEach(sosLogs.sorted(by: { $0.timestamp > $1.timestamp })) { log in
-                            HStack(alignment: .top) {
-                                Image(systemName: log.type == .call ? "phone.fill" : "message.fill")
-                                    .foregroundColor(log.type == .call ? .green : .blue)
-                                VStack(alignment: .leading) {
-                                    Text("\(log.contactName) (\(log.contactPhone))")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white)
-                                    Text(log.type == .call ? "Call successful" : "Text sent: \(log.message ?? "")")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.7))
-                                    Text(log.timestamp, style: .time)
-                                        .font(.caption2)
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
-                            }
-                            .padding(6)
-                            .background(Color.black.opacity(0.25))
-                            .cornerRadius(12)
-                        }
-                    }
-                    .padding(.horizontal, 30)
-                }
+                emergencyInfo
+                slideToCancel
+                recentActions
             }
         }
         .onReceive(timer) { _ in
@@ -348,6 +149,227 @@ struct SOSView: View {
         .sheet(isPresented: $showingMessageComposer) {
             // Due to iOS privacy restrictions, user must manually send the SMS when presented
             MessageComposeView(recipients: messageRecipients, body: emergencyMessage)
+        }
+    }
+    
+    // MARK: - Extracted Views
+    
+    private var header: some View {
+        HStack {
+            Button(action: {
+                appState.currentScreen = .dashboard
+            }) {
+                Text("Cancel")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                    .shadow(color: Color.red.opacity(0.7), radius: 8, x: 0, y: 2)
+            }
+            .fixedSize()
+            
+            Spacer()
+            
+            VStack(spacing: 6) {
+                Text("EMERGENCY SOS")
+                    .font(.largeTitle)
+                    .fontWeight(.heavy)
+                    .foregroundColor(.white)
+                    .shadow(color: Color.red.opacity(0.9), radius: 4, x: 0, y: 0)
+                    .padding(.bottom, 4)
+                
+                if let user = authService.currentUser {
+                    Text(user.name)
+                        .font(.subheadline)
+                        .foregroundColor(Color.white.opacity(0.7))
+                        .shadow(color: Color.black.opacity(0.7), radius: 1, x: 0, y: 0)
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: {
+                showingSafeWordInput = true
+            }) {
+                Text("Safe Word")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                    .shadow(color: Color.red.opacity(0.7), radius: 8, x: 0, y: 2)
+            }
+            .fixedSize()
+        }
+        .padding(.horizontal, 30)
+        .padding(.top, 20)
+    }
+    
+    @ViewBuilder
+    private var emergencyInfo: some View {
+        if isSOSActive {
+            VStack(spacing: 18) {
+                if let location = locationService.currentLocation {
+                    VStack(spacing: 8) {
+                        Text("Your Location")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        
+                        Text(locationService.lastKnownAddress ?? "Unknown location")
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(12)
+                    .background(Color.red.opacity(0.3))
+                    .cornerRadius(12)
+                    .shadow(color: Color.red.opacity(0.5), radius: 10, x: 0, y: 5)
+                }
+                
+                Button(action: {
+                    showingEmergencyContacts = true
+                }) {
+                    Text("View Emergency Contacts")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 40)
+                        .background(
+                            VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                                )
+                        )
+                        .shadow(color: Color.blue.opacity(0.8), radius: 12, x: 0, y: 5)
+                }
+            }
+            .padding(.horizontal, 30)
+        } else {
+            EmptyView()
+        }
+    }
+    
+    @ViewBuilder
+    private var slideToCancel: some View {
+        if isSOSActive {
+            VStack(spacing: 18) {
+                Text("Slide to cancel emergency")
+                    .font(.caption)
+                    .foregroundColor(Color.white.opacity(0.7))
+                    .padding(.bottom, 6)
+                
+                ZStack {
+                    VisualEffectBlur(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                        .frame(width: 260, height: 60)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                        .shadow(color: Color.red.opacity(0.6), radius: 12, x: 0, y: 6)
+                    
+                    HStack {
+                        RoundedRectangle(cornerRadius: 25)
+                            .fill(Color.white)
+                            .frame(width: 60, height: 60)
+                            .shadow(color: Color.red.opacity(0.8), radius: 15, x: 0, y: 0)
+                            .scaleEffect(isDragging ? 0.95 : 1.0)
+                            .offset(x: dragOffset.width)
+                            .overlay(
+                                Image(systemName: "hand.point.right.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(Color.red)
+                            )
+                            .opacity(pulse ? 0.85 : 1)
+                            .animation(
+                                Animation.easeInOut(duration: 1.2)
+                                    .repeatForever(autoreverses: true),
+                                value: pulse
+                            )
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        dragOffset = value.translation
+                                        isDragging = true
+                                    }
+                                    .onEnded { _ in
+                                        if dragOffset.width > 130 {
+                                            cancelSOS()
+                                        }
+                                        dragOffset = .zero
+                                        isDragging = false
+                                    }
+                            )
+                            .onAppear {
+                                pulse = true
+                            }
+                        
+                        Spacer()
+                    }
+                    .frame(width: 260, height: 60)
+                    
+                    Text("Cancel")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color.white.opacity(0.85))
+                        .offset(x: dragOffset.width / 2)
+                        .shadow(color: Color.black.opacity(0.7), radius: 2, x: 0, y: 1)
+                }
+            }
+            .padding(.bottom, 30)
+        } else {
+            EmptyView()
+        }
+    }
+    
+    @ViewBuilder
+    private var recentActions: some View {
+        if !sosLogs.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Recent Emergency Actions")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                ForEach(sosLogs.sorted(by: { $0.timestamp > $1.timestamp })) { log in
+                    HStack(alignment: .top) {
+                        Image(systemName: log.type == .call ? "phone.fill" : "message.fill")
+                            .foregroundColor(log.type == .call ? .green : .blue)
+                        VStack(alignment: .leading) {
+                            Text("\(log.contactName) (\(log.contactPhone))")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                            Text(log.type == .call ? "Call successful" : "Text sent: \(log.message ?? "")")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.7))
+                            Text(log.timestamp, style: .time)
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                    }
+                    .padding(6)
+                    .background(Color.black.opacity(0.25))
+                    .cornerRadius(12)
+                }
+            }
+            .padding(.horizontal, 30)
+        } else {
+            EmptyView()
         }
     }
     
@@ -707,8 +729,34 @@ struct SafeWordInputView: View {
     }
 }
 
+struct MessageComposeView: UIViewControllerRepresentable {
+    let recipients: [String]
+    let body: String
+    @Environment(\.dismiss) private var dismiss
+
+    class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let parent: MessageComposeView
+        init(parent: MessageComposeView) { self.parent = parent }
+        func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
+            controller.dismiss(animated: true) { self.parent.dismiss() }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        let vc = MFMessageComposeViewController()
+        vc.messageComposeDelegate = context.coordinator
+        vc.recipients = recipients
+        vc.body = body
+        return vc
+    }
+    func updateUIViewController(_ uiViewController: MFMessageComposeViewController, context: Context) {}
+}
+
+// ---- END MessageComposeView ----
+
 #Preview {
     SOSView()
         .environmentObject(AppState())
 }
-
