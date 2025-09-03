@@ -37,7 +37,7 @@ struct LoadingView: View {
                 ProgressView()
                     .scaleEffect(1.5)
                 
-                Text("Loading SecureNow...")
+                Text("Loading DEFENDO-AI ...")
                     .font(.headline)
                     .foregroundColor(.secondary)
             }
@@ -61,7 +61,7 @@ struct OnboardingView: View {
                         .font(.system(size: 80))
                         .foregroundColor(.blue)
                     
-                    Text("SecureNow")
+                    Text("DEFENDO-AI")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                     
@@ -220,7 +220,7 @@ struct HomeView: View {
                 }
                 .padding()
             }
-            .navigationTitle("SecureNow")
+            .navigationTitle("DEFENDO-AI")
             .navigationBarTitleDisplayMode(.large)
         }
     }

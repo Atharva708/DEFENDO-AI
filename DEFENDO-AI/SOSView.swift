@@ -40,7 +40,7 @@ struct SOSView: View {
     @EnvironmentObject var apiService: APIService
     
     @State private var isSOSActive = false
-    @State private var timeRemaining = 15 // 15 seconds total
+    @State private var timeRemaining = 10 // 15 seconds total
     @State private var safeWord = ""
     @State private var showingSafeWordInput = false
     @State private var currentAlertId: String?
@@ -59,7 +59,7 @@ struct SOSView: View {
     @State private var dragOffsetX: CGFloat = 0
     
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    private let totalTime = 15
+    private let totalTime = 10
     
     var body: some View {
         ZStack {
@@ -73,9 +73,9 @@ struct SOSView: View {
                 }) {
                     Text("SOS")
                         .bold()
-                        .font(.system(size: 96))
+                        .font(.system(size: 48))
                         .foregroundColor(.white)
-                        .frame(width: 180, height: 180)
+                        .frame(width: 200, height: 200)
                         .background(Circle().fill(Color.red))
                         .shadow(color: Color.red.opacity(0.7), radius: 20, x: 0, y: 10)
                 }
@@ -85,7 +85,8 @@ struct SOSView: View {
                     Text(timeString(from: timeRemaining))
                         .font(.system(size: 48, weight: .semibold, design: .monospaced))
                         .foregroundColor(.red)
-                        .padding(.top, 40)
+                        .padding(.top, 60)
+                        .padding(.bottom, )
                 }
                 
                 Spacer()
@@ -100,7 +101,7 @@ struct SOSView: View {
                             cancelSOS()
                             dragOffsetX = 0
                         })
-                        .frame(height: 56)
+                        .frame(height:70)
                         .padding(.horizontal, 40)
                     }
                     .padding(.bottom, 40)
@@ -126,7 +127,7 @@ struct SOSView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("SecureNow needs location access to provide emergency services. Please enable location access in Settings.")
+            Text("DEFENDO needs location access to provide emergency services. Please enable location access in Settings.")
                 .foregroundColor(.primary)
         }
         .sheet(isPresented: $showingMessageComposer) {
@@ -320,7 +321,7 @@ struct SliderCancelView: View {
     
     var body: some View {
         GeometryReader { geo in
-            let maxOffset = geo.size.width - 56 // 56 is the diameter of the circle
+            let maxOffset = geo.size.width - 70 // 70 is the diameter of the circle
             
             ZStack(alignment: .leading) {
                 Capsule()
@@ -328,12 +329,12 @@ struct SliderCancelView: View {
                 
                 Capsule()
                     .fill(Color.red)
-                    .frame(width: dragOffsetX + 56 > 0 ? dragOffsetX + 56 : 0)
+                    .frame(width: dragOffsetX + 70 > 0 ? dragOffsetX + 70 : 0)
                     .animation(.linear(duration: 0.1), value: dragOffsetX)
                 
                 Circle()
                     .fill(Color.white)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 70, height: 70)
                     .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
                     .offset(x: max(0, min(dragOffsetX, maxOffset)))
                     .gesture(
