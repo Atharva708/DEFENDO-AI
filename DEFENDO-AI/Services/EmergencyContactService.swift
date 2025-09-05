@@ -9,6 +9,7 @@ import Foundation
 import Contacts
 import Combine
 import UIKit
+import LocalAuthentication
 
 class EmergencyContactService: ObservableObject {
     @Published var emergencyContacts: [EmergencyContact] = []
@@ -16,6 +17,18 @@ class EmergencyContactService: ObservableObject {
     @Published var authorizationStatus: CNAuthorizationStatus = .notDetermined
     
     private let contactStore = CNContactStore()
+    
+    private func authenticateWithBiometrics(reason: String = "Authenticate to manage emergency contacts", completion: @escaping (Bool) -> Void) {
+        let context = LAContext()
+        var error: NSError?
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, _ in
+                DispatchQueue.main.async { completion(success) }
+            }
+        } else {
+            DispatchQueue.main.async { completion(false) }
+        }
+    }
     
     init() {
         checkAuthorizationStatus()
@@ -96,19 +109,25 @@ class EmergencyContactService: ObservableObject {
     }
     
     func addEmergencyContact(_ contact: EmergencyContact) {
-        emergencyContacts.append(contact)
-        saveEmergencyContacts()
+        self.emergencyContacts.append(contact)
+        self.saveEmergencyContacts()
     }
     
     func removeEmergencyContact(withId id: String) {
-        emergencyContacts.removeAll { $0.id == id }
-        saveEmergencyContacts()
+        self.emergencyContacts.removeAll { $0.id == id }
+        self.saveEmergencyContacts()
     }
     
     func updateEmergencyContact(_ contact: EmergencyContact) {
-        if let index = emergencyContacts.firstIndex(where: { $0.id == contact.id }) {
-            emergencyContacts[index] = contact
-            saveEmergencyContacts()
+        authenticateWithBiometrics(reason: "Authenticate to update emergency contact") { success in
+            if success {
+                if let index = self.emergencyContacts.firstIndex(where: { $0.id == contact.id }) {
+                    self.emergencyContacts[index] = contact
+                    self.saveEmergencyContacts()
+                }
+            } else {
+                print("Biometric authentication failed")
+            }
         }
     }
     

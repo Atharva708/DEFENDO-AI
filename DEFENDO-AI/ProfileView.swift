@@ -9,6 +9,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import ContactsUI
+import LocalAuthentication
 
 // MARK: - CLLocation Wrapper for Identifiable
 
@@ -24,6 +25,7 @@ struct ProfileView: View {
     @State private var showingSettings = false
     @State private var showingEmergencyContacts = false
     @State private var showingSignOutAlert = false
+    @State private var showingAuthFailedAlert = false
 
     var body: some View {
         NavigationView {
@@ -32,7 +34,7 @@ struct ProfileView: View {
                     ProfileHeaderView()
                     // Removed QuickActionsSection()
                     SettingsSection(showingSettings: $showingSettings)
-                    EmergencyContactsSection(showingEmergencyContacts: $showingEmergencyContacts)
+                    EmergencyContactsSection(authenticateAndShowEmergencyContacts: authenticateAndShowEmergencyContacts)
                     SafetySettingsSection()
                     SignOutSection(showingSignOutAlert: $showingSignOutAlert)
                 }
@@ -60,6 +62,35 @@ struct ProfileView: View {
                 }
             } message: {
                 Text("Are you sure you want to sign out?")
+            }
+            .alert("Authentication Failed", isPresented: $showingAuthFailedAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Unable to verify your identity. Please try again.")
+            }
+        }
+    }
+
+    func authenticateAndShowEmergencyContacts() {
+        let context = LAContext()
+        var error: NSError?
+
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            let reason = "Please authenticate to access Emergency Contacts."
+            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, authError in
+                DispatchQueue.main.async {
+                    if success {
+                        showingEmergencyContacts = true
+                    } else {
+                        showingAuthFailedAlert = true
+                    }
+                }
+            }
+        } else {
+            // No biometric available, optionally just show EmergencyContacts
+            // But instruction does not specify, so do nothing or show alert:
+            DispatchQueue.main.async {
+                showingAuthFailedAlert = true
             }
         }
     }
@@ -214,9 +245,11 @@ struct SettingsSection: View {
 }
 
 struct EmergencyContactsSection: View {
-    @Binding var showingEmergencyContacts: Bool
+    let authenticateAndShowEmergencyContacts: () -> Void
     var body: some View {
-        Button(action: { showingEmergencyContacts = true }) {
+        Button(action: {
+            authenticateAndShowEmergencyContacts()
+        }) {
             HStack {
                 Image(systemName: "person.2.fill")
                 Text("Emergency Contacts")

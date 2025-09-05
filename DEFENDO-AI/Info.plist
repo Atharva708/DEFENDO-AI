@@ -80,5 +80,21 @@
 			</array>
 		</dict>
 	</dict>
+    
+    <!-- App Icon Configuration -->
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>AppIcon</string>
+            </array>
+        </dict>
+    </dict>
+
+    <!-- Face ID Permission -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>This app uses Face ID for secure authentication and emergency features. Your facial data never leaves your device.</string>
 </dict>
 </plist>
