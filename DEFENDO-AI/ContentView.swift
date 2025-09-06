@@ -270,9 +270,6 @@ struct QuickActionsGrid: View {
             QuickActionCard(icon: "exclamationmark.triangle.fill", title: "My Alerts", color: .orange) {
                 showingAlertsView = true
             }
-            QuickActionCard(icon: "person.2.fill", title: "Emergency Contacts", color: .red) {
-                showingEmergencyContactsView = true
-            }
         }
         .sheet(isPresented: $showingBookingsView) {
             BookingsView()
@@ -634,6 +631,7 @@ struct AlertsView: View {
     }
 }
 
+// #Preview
 #Preview {
     RootView()
         .environmentObject(AppState())

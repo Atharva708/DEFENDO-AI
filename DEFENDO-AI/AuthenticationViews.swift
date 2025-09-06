@@ -454,8 +454,8 @@ struct SignUpView: View {
     }
     
     private var isFormValid: Bool {
-        !name.isEmpty && !email.isEmpty && !phone.isEmpty && 
-        !password.isEmpty && password == confirmPassword && 
+        !name.isEmpty && !email.isEmpty && !phone.isEmpty &&
+        !password.isEmpty && password == confirmPassword &&
         password.count >= 6 && agreedToTerms
     }
 }
@@ -563,4 +563,3 @@ struct CustomTextFieldStyle: TextFieldStyle {
     AuthenticationContainerView()
         .environmentObject(AuthService())
 }
-

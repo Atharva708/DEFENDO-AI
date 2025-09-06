@@ -93,8 +93,51 @@
         </dict>
     </dict>
 
+    
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+      <string>tez</string>
+      <string>phonepe</string>
+      <string>paytmmp</string>
+      <string>credpay</string>
+      <string>mobikwik</string>
+      <string>freecharge</string>
+      <string>in.fampay.app</string>
+      <string>bhim</string>
+      <string>amazonpay</string>
+      <string>navi</string>
+      <string>kiwi</string>
+      <string>payzapp</string>
+      <string>jupiter</string>
+      <string>omnicard</string>
+      <string>icici</string>
+      <string>popclubapp</string>
+      <string>sbiyono</string>
+      <string>myjio</string>
+      <string>slice-upi</string>
+      <string>bobupi</string>
+      <string>shriramone</string>
+      <string>indusmobile</string>
+      <string>whatsapp</string>
+    </array>
+
+    
+    
+    
     <!-- Face ID Permission -->
     <key>NSFaceIDUsageDescription</key>
     <string>This app uses Face ID for secure authentication and emergency features. Your facial data never leaves your device.</string>
+
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>securenow</string>
+            </array>
+            <key>CFBundleURLName</key>
+            <string>DigilockerCallback</string>
+        </dict>
+    </array>
 </dict>
 </plist>

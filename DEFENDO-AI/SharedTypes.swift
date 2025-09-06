@@ -146,6 +146,7 @@ struct IncidentReport: Identifiable, Codable, Sendable {
 // MARK: - Service Types
 enum ServiceType: String, CaseIterable, Codable, Sendable {
     case securityGuard = "securityGuard"
+    case bodyguard = "bodyguard"
     case dronePatrol = "dronePatrol"
     case surveillance = "surveillance"
     case escort = "escort"
@@ -223,3 +224,4 @@ extension SeverityLevel {
         }
     }
 }
+

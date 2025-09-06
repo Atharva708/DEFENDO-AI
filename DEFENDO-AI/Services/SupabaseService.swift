@@ -247,8 +247,8 @@ class SupabaseService: ObservableObject {
             end_time: DateFormats.timeHMS.string(from: booking.endTime),
             duration_hours: booking.durationHours,
             location: booking.location,
-            latitude: booking.latitude,
-            longitude: booking.longitude,
+            latitude: booking.latitude as Double?,
+            longitude: booking.longitude as Double?,
             status: booking.status.rawValue,
             price: booking.price,
             payment_status: "pending",
@@ -497,7 +497,7 @@ struct SOSAlertData: Sendable {
     let signalStrength: Int?
 }
 
-struct BookingData: Sendable {
+struct BookingData: Identifiable, Sendable {
     let id: String
     let userId: String
     let providerId: String

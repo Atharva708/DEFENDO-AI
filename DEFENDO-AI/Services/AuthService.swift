@@ -401,4 +401,3 @@ class AuthService: ObservableObject {
         authSuccess = nil
     }
 }
-
