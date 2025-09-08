@@ -10,6 +10,9 @@ import Combine
 import CoreLocation
 import UIKit
 import MessageUI
+import AVFoundation
+import MediaPlayer
+import Foundation
 
 struct SOSLogEntry: Identifiable {
     let id = UUID()
@@ -58,11 +61,21 @@ struct SOSView: View {
     // Slider drag state
     @State private var dragOffsetX: CGFloat = 0
     
+    @State private var volumePresses = 0
+    @State private var lastVolumePressDate: Date? = nil
+    @State private var initialVolume: Float = AVAudioSession.sharedInstance().outputVolume
+    
+    @State private var shouldAutoActivateSOS = false
+    
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private let totalTime = 10
     
     var body: some View {
         ZStack {
+            VolumeButtonListenerView(onVolumePress: handleVolumeButtonPress)
+                .frame(width: 0, height: 0)
+                .hidden()
+            
             Color.black.ignoresSafeArea()
             
             VStack {
@@ -132,6 +145,24 @@ struct SOSView: View {
         }
         .sheet(isPresented: $showingMessageComposer) {
             MessageComposeView(recipients: messageRecipients, body: emergencyMessage)
+        }
+        .onAppear {
+            NotificationCenter.default.addObserver(forName: NSNotification.Name("TriggerSOSFromWidget"), object: nil, queue: .main) { _ in
+                if !isSOSActive {
+                    shouldAutoActivateSOS = true
+                }
+            }
+            // If already set before appear (race), activate immediately
+            if shouldAutoActivateSOS && !isSOSActive {
+                activateSOS()
+                shouldAutoActivateSOS = false
+            }
+        }
+        .onChange(of: shouldAutoActivateSOS) { newValue in
+            if newValue && !isSOSActive {
+                activateSOS()
+                shouldAutoActivateSOS = false
+            }
         }
     }
     
@@ -311,6 +342,21 @@ struct SOSView: View {
         let remainingSeconds = seconds % 60
         return String(format: "%02d:%02d", minutes, remainingSeconds)
     }
+    
+    private func handleVolumeButtonPress() {
+        let now = Date()
+        if let last = lastVolumePressDate, now.timeIntervalSince(last) < 5 {
+            volumePresses += 1
+        } else {
+            volumePresses = 1
+        }
+        lastVolumePressDate = now
+        if volumePresses >= 5 && !isSOSActive {
+            activateSOS()
+            volumePresses = 0
+            lastVolumePressDate = nil
+        }
+    }
 }
 
 struct SliderCancelView: View {
@@ -428,6 +474,46 @@ struct MessageComposeView: UIViewControllerRepresentable {
 
 // ---- END MessageComposeView ----
 
+struct VolumeButtonListenerView: UIViewRepresentable {
+    var onVolumePress: () -> Void
+    class Coordinator: NSObject {
+        var onVolumePress: () -> Void
+        var observation: NSKeyValueObservation?
+        init(onVolumePress: @escaping () -> Void) {
+            self.onVolumePress = onVolumePress
+            super.init()
+            let audioSession = AVAudioSession.sharedInstance()
+            try? audioSession.setActive(true)
+        }
+        func startObserving() {
+            let audioSession = AVAudioSession.sharedInstance()
+            observation = audioSession.observe(\.outputVolume, options: [.new]) { _, _ in
+                self.onVolumePress()
+            }
+        }
+        func stopObserving() {
+            observation?.invalidate()
+            observation = nil
+        }
+    }
+    func makeCoordinator() -> Coordinator {
+        let coordinator = Coordinator(onVolumePress: onVolumePress)
+        coordinator.startObserving()
+        return coordinator
+    }
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        let volumeView = MPVolumeView(frame: .zero)
+        volumeView.isHidden = true
+        view.addSubview(volumeView)
+        return view
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.stopObserving()
+    }
+}
+
 #Preview {
     SOSView()
         .environmentObject(AppState())
@@ -437,3 +523,4 @@ struct MessageComposeView: UIViewControllerRepresentable {
         .environmentObject(EmergencyContactService())
         .environmentObject(APIService())
 }
+

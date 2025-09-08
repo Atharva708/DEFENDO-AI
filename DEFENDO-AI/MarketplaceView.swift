@@ -51,8 +51,8 @@ struct MarketplaceView: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
-                                .background(selectedCategory == category ? Color.blue : Color(.systemGray6))
-                                .foregroundColor(selectedCategory == category ? .white : .primary)
+                                .background(selectedCategory == category ? Color.blue : Color.black)
+                                .foregroundColor(selectedCategory == category ? .white : .white.opacity(0.8))
                                 .cornerRadius(20)
                             }
                         }
@@ -60,7 +60,7 @@ struct MarketplaceView: View {
                     }
                 }
                 .padding()
-                .background(Color.white)
+                .background(Color.black)
                 
                 // Provider List
                 ScrollView {
@@ -77,6 +77,7 @@ struct MarketplaceView: View {
             }
             .navigationTitle("Marketplace")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Color.black, for: .navigationBar)
             .navigationBarItems(trailing: Button("Filters") {
                 activeSheet = .filters
             })

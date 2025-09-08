@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct DEFENDO_AIApp: App {
@@ -12,6 +13,8 @@ struct DEFENDO_AIApp: App {
     @StateObject private var apiService = APIService()
     // Add other services as needed
 
+    @State private var triggerSOSFromDeepLink = false
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -22,7 +25,26 @@ struct DEFENDO_AIApp: App {
                 .environmentObject(notificationService)
                 .environmentObject(emergencyContactService)
                 .environmentObject(apiService)
-                // Add other environment objects as needed
+                .fullScreenCover(isPresented: $triggerSOSFromDeepLink, content: {
+                    SOSView()
+                        .environmentObject(appState)
+                        .environmentObject(authService)
+                        .environmentObject(notificationService)
+                        .environmentObject(locationService)
+                        .environmentObject(emergencyContactService)
+                        .environmentObject(apiService)
+                        .onAppear {
+                            // Trigger SOS only when launched from deep link
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                NotificationCenter.default.post(name: NSNotification.Name("TriggerSOSFromWidget"), object: nil)
+                            }
+                        }
+                })
+                .onOpenURL { url in
+                    if url.scheme == "defendoai" && url.host == "sos" {
+                        triggerSOSFromDeepLink = true
+                    }
+                }
         }
     }
 }

@@ -26,15 +26,15 @@ struct BookingsView: View {
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(selectedFilter == filter ? Color.blue : Color(.systemGray6))
-                            .foregroundColor(selectedFilter == filter ? .white : .primary)
+                            .background(selectedFilter == filter ? Color.blue : Color.black)
+                            .foregroundColor(selectedFilter == filter ? .white : .white.opacity(0.8))
                             .cornerRadius(20)
                         }
                     }
                     .padding(.horizontal)
                 }
                 .padding(.vertical)
-                .background(Color.white)
+                .background(Color.black)
                 
                 // Bookings List
                 ScrollView {
@@ -48,6 +48,7 @@ struct BookingsView: View {
             }
             .navigationTitle("My Bookings")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Color.black, for: .navigationBar)
             .searchable(text: $searchText, prompt: "Search bookings...")
         }
     }

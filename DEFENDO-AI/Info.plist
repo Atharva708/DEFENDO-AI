@@ -81,19 +81,6 @@
 		</dict>
 	</dict>
     
-    <!-- App Icon Configuration -->
-    <key>CFBundleIcons</key>
-    <dict>
-        <key>CFBundlePrimaryIcon</key>
-        <dict>
-            <key>CFBundleIconFiles</key>
-            <array>
-                <string>AppIcon</string>
-            </array>
-        </dict>
-    </dict>
-
-    
     <key>LSApplicationQueriesSchemes</key>
     <array>
       <string>tez</string>
@@ -122,14 +109,14 @@
     </array>
 
     
-    
-    
-    <!-- Face ID Permission -->
-    <key>NSFaceIDUsageDescription</key>
-    <string>This app uses Face ID for secure authentication and emergency features. Your facial data never leaves your device.</string>
-
     <key>CFBundleURLTypes</key>
     <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>defendoai</string>
+            </array>
+        </dict>
         <dict>
             <key>CFBundleURLSchemes</key>
             <array>
@@ -139,5 +126,9 @@
             <string>DigilockerCallback</string>
         </dict>
     </array>
+    
+    <!-- Face ID Permission -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>This app uses Face ID for secure authentication and emergency features. Your facial data never leaves your device.</string>
 </dict>
 </plist>
