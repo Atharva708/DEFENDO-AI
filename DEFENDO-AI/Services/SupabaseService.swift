@@ -251,7 +251,7 @@ class SupabaseService: ObservableObject {
             longitude: booking.longitude as Double?,
             status: booking.status.rawValue,
             price: booking.price,
-            payment_status: "pending",
+            payment_status: booking.paymentStatus,
             created_at: now,
             updated_at: now,
             user_notes: booking.userNotes
@@ -263,6 +263,21 @@ class SupabaseService: ObservableObject {
             .execute()
 
         return booking.id
+    }
+
+    // Update booking status and payment_status columns
+    func updateBookingStatusAndPayment(id: String, status: BookingStatus, paymentStatus: String) async throws {
+        let payload = BookingStatusPaymentUpdate(
+            status: status.rawValue,
+            payment_status: paymentStatus,
+            updated_at: DateFormats.rfc3339.string(from: Date())
+        )
+
+        _ = try await client
+            .from("bookings")
+            .update(payload)
+            .eq("id", value: id)
+            .execute()
     }
 
     func getBookings(userId: String) async throws -> [BookingData] {
@@ -297,7 +312,39 @@ class SupabaseService: ObservableObject {
                 longitude: row.longitude,
                 status: BookingStatus(rawValue: row.status) ?? .pending,
                 price: row.price,
-                userNotes: row.user_notes
+                userNotes: row.user_notes,
+                paymentStatus: row.payment_status
+            )
+        }
+    }
+
+    // MARK: - Marketplace: Host Services
+
+    /// Fetch all active host services from Supabase
+    func fetchHostServices() async throws -> [HostService] {
+        let response: PostgrestResponse<[HostServiceRow]> = try await client
+            .from("host_services")
+            .select()
+            .order("created_at", ascending: false)
+            .execute()
+
+        return response.value.map { row in
+            HostService(
+                id: row.id,
+                service_name: row.service_name,
+                price: row.price,
+                price_per_hour: row.price_per_hour,
+                currency: row.currency,
+                rating: row.rating,
+                city: row.city,
+                service_type: row.service_type,
+                description: row.description,
+                specializations: row.specializations,
+                equipment_included: row.equipment_included,
+                images: row.images,
+                is_active: row.is_active,
+                total_bookings: row.total_bookings,
+                host_id: row.host_id
             )
         }
     }
@@ -394,6 +441,27 @@ nonisolated(unsafe) struct BookingRow: Codable, Sendable {
     let user_notes: String?
 }
 
+// Host service row as stored in Supabase
+nonisolated(unsafe) struct HostServiceRow: Codable, Sendable {
+    let id: String
+    let service_name: String
+    let price: Double?
+    let price_per_hour: Double?
+    let currency: String?
+    let rating: Double?
+    let city: String?
+    let service_type: String?
+    let description: String?
+    let specializations: [String]?
+    let equipment_included: [String]?
+    let images: [String]?
+    let is_active: Bool?
+    let total_bookings: Int?
+    let host_id: String?
+    let created_at: String?
+    let updated_at: String?
+}
+
 // MARK: - Insert/Update Helper Payloads
 
 nonisolated(unsafe) struct UserProfileInsert: Codable, Sendable {
@@ -467,6 +535,12 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let user_notes: String?
 }
 
+nonisolated(unsafe) struct BookingStatusPaymentUpdate: Codable, Sendable {
+    let status: String
+    let payment_status: String
+    let updated_at: String
+}
+
 nonisolated(unsafe) struct LocationHistoryInsert: Codable, Sendable {
     let id: String
     let user_id: String
@@ -512,6 +586,7 @@ struct BookingData: Identifiable, Sendable {
     let status: BookingStatus
     let price: Double
     let userNotes: String?
+    let paymentStatus: String
 }
 
 struct LocationHistoryData: Sendable {

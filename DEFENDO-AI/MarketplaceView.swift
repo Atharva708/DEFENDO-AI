@@ -219,7 +219,8 @@ struct NewBookingFlowView: View, Identifiable {
             longitude: 0.0,
             status: .pending,
             price: totalPrice,
-            userNotes: userNotes.isEmpty ? nil : userNotes
+            userNotes: userNotes.isEmpty ? nil : userNotes,
+            paymentStatus: "pending"
         )
 
         Task {
@@ -235,3 +236,306 @@ struct NewBookingFlowView: View, Identifiable {
     }
 }
 
+
+// MARK: - MarketplaceView and related views
+
+struct MarketplaceView: View {
+    @State private var services: [HostService] = []
+    @State private var isLoading = true
+    @State private var fetchError: String? = nil
+    @State private var selectedService: HostService? = nil
+    @State private var searchText: String = ""
+    @State private var selectedCategory: String = "Guards"
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    ProgressView("Loading services...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = fetchError {
+                    VStack(spacing: 20) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 40))
+                            .foregroundColor(.red)
+                        Text("Failed to load services")
+                            .font(.title3)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Button("Retry") {
+                            fetchServices()
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Search Bar
+                            HStack {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(.secondary)
+                                TextField("Search providers...", text: $searchText)
+                                    .textInputAutocapitalization(.never)
+                                    .disableAutocorrection(true)
+                            }
+                            .padding()
+                            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+
+                            // Category Pills
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(categories, id: \.self) { cat in
+                                        Button(action: { selectedCategory = cat }) {
+                                            Text(cat)
+                                                .fontWeight(.semibold)
+                                                .padding(.vertical, 10)
+                                                .padding(.horizontal, 16)
+                                                .background(selectedCategory == cat ? Color.accentColor : Color(.secondarySystemBackground))
+                                                .foregroundColor(selectedCategory == cat ? .white : .primary)
+                                                .clipShape(Capsule())
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 2)
+                            }
+
+                            // Results
+                            LazyVStack(spacing: 20) {
+                                ForEach(filteredServices) { service in
+                                    VStack(spacing: 12) {
+                                        ServiceCardView(service: service)
+                                            .onTapGesture { selectedService = service }
+                                        Button("Book Now") { selectedService = service }
+                                            .buttonStyle(PrimaryButtonStyle())
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                    }
+                    .sheet(item: $selectedService) { svc in
+                        HostServiceDetailView(service: svc)
+                    }
+                }
+            }
+            .navigationTitle("Marketplace")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Filters") {}
+                }
+            }
+            .onAppear(perform: fetchServices)
+        }
+    }
+
+    private var categories: [String] {
+        ["Guards", "Drones", "Studios", "Agencies", "Escort", "Surveillance"]
+    }
+
+    private var filteredServices: [HostService] {
+        services.filter { svc in
+            let matchesSearch: Bool = searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                svc.service_name.localizedCaseInsensitiveContains(searchText) ||
+                (svc.city?.localizedCaseInsensitiveContains(searchText) ?? false)
+            let matchesCategory: Bool
+            switch selectedCategory {
+            case "Guards":
+                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("guard")
+            case "Drones":
+                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("drone")
+            case "Studios":
+                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("studio")
+            case "Agencies":
+                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("agency")
+            case "Escort":
+                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("escort")
+            case "Surveillance":
+                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("surveillance")
+            default:
+                matchesCategory = true
+            }
+            return matchesSearch && (matchesCategory || selectedCategory.isEmpty)
+        }
+    }
+
+    private func fetchServices() {
+        isLoading = true
+        fetchError = nil
+        Task {
+            do {
+                // TODO: Implement fetchHostServices() in SupabaseService
+                if let fetched: [HostService] = try? await SupabaseService.shared.fetchHostServices() {
+                    await MainActor.run {
+                        self.services = fetched
+                        self.isLoading = false
+                    }
+                } else {
+                    throw NSError(domain: "No data", code: -1, userInfo: nil)
+                }
+            } catch {
+                await MainActor.run {
+                    self.fetchError = error.localizedDescription
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+}
+
+struct ServiceCardView: View {
+    let service: HostService
+    var body: some View {
+        HStack(spacing: 14) {
+            // Thumbnail
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(.systemGray5))
+                if let imageUrl = service.images?.first, let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                        case .success(let img):
+                            img.resizable()
+                               .scaledToFill()
+                        case .failure(_):
+                            Image(systemName: "photo").font(.title)
+                                .foregroundColor(.gray)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                } else {
+                    Image(systemName: "shield.lefthalf.fill")
+                        .font(.title)
+                        .foregroundColor(.gray)
+                }
+            }
+            .frame(width: 84, height: 84)
+
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
+                Text(service.service_name)
+                    .font(.headline)
+                    .lineLimit(1)
+                if let type = service.service_type {
+                    Text(type.capitalized)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                if let city = service.city {
+                    Text(city)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                HStack(spacing: 10) {
+                    if let price = service.price_per_hour ?? service.price {
+                        Text(currencyString(price, code: service.currency) + "/hr")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.accentColor)
+                    }
+                    HStack(spacing: 2) {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                            .font(.caption2)
+                        Text(String(format: "%.1f", service.rating ?? 0.0))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+        )
+    }
+}
+
+// Locale-aware currency formatting helper
+private func currencyString(_ amount: Double, code: String?) -> String {
+    let f = NumberFormatter()
+    f.numberStyle = .currency
+    if let code = code { f.currencyCode = code }
+    return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+}
+
+struct HostServiceDetailView: View {
+    let service: HostService
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var showBooking = false
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let imgUrl = service.images?.first, let url = URL(string: imgUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView().frame(height: 200)
+                            case .success(let img):
+                                img.resizable().scaledToFill().frame(height: 200)
+                                    .clipped().cornerRadius(18)
+                            case .failure(_):
+                                Image(systemName: "photo").frame(height: 200)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    }
+                    Text(service.service_name)
+                        .font(.title).fontWeight(.bold)
+                    if let desc = service.description {
+                        Text(desc).font(.body)
+                    }
+                    if let city = service.city {
+                        Text("City: \(city)").font(.subheadline).foregroundColor(.secondary)
+                    }
+                    if let specializations = service.specializations, !specializations.isEmpty {
+                        Text("Specializations: \(specializations.joined(separator: ", "))")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                    if let price = service.price_per_hour ?? service.price, let currency = service.currency {
+                        HStack {
+                            Text("Price: ")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            Text("\(currency)\(String(format: "%.2f", price))/hr")
+                                .font(.headline)
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                    Button("Book This Service") {
+                        showBooking = true
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .padding(.top, 12)
+                }
+                .padding()
+            }
+            .navigationTitle("Service Details")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showBooking) {
+                BookingFlowView(service: service)
+                    .environmentObject(appState)
+                    .environmentObject(authService)
+            }
+        }
+    }
+}

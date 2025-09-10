@@ -99,7 +99,7 @@ struct SOSView: View {
                         .font(.system(size: 48, weight: .semibold, design: .monospaced))
                         .foregroundColor(.red)
                         .padding(.top, 60)
-                        .padding(.bottom, )
+                        .padding(.bottom, 40)
                 }
                 
                 Spacer()

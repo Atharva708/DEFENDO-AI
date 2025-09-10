@@ -151,7 +151,9 @@ class APIService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(getAuthToken())", forHTTPHeaderField: "Authorization")
+        if let token = getAuthToken(), !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         
         if let body = body {
             do {
@@ -163,9 +165,22 @@ class APIService: ObservableObject {
         }
         
         return session.dataTaskPublisher(for: request)
-            .map(\.data)
+            .tryMap { output -> Data in
+                if let httpResponse = output.response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    if let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: output.data) {
+                        throw APIError.serverError(apiError.message)
+                    }
+                    if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+                    if httpResponse.statusCode == 404 { throw APIError.notFound }
+                    throw APIError.serverError("HTTP \(httpResponse.statusCode)")
+                }
+                return output.data
+            }
             .decode(type: U.self, decoder: JSONDecoder())
-            .mapError { APIError.networkError($0) }
+            .mapError { error in
+                if let apiError = error as? APIError { return apiError }
+                return APIError.networkError(error)
+            }
             .eraseToAnyPublisher()
     }
 
@@ -185,17 +200,32 @@ class APIService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(getAuthToken())", forHTTPHeaderField: "Authorization")
+        if let token = getAuthToken(), !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         return session.dataTaskPublisher(for: request)
-            .map(\.data)
+            .tryMap { output -> Data in
+                if let httpResponse = output.response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+                    if let apiError = try? JSONDecoder().decode(APIErrorResponse.self, from: output.data) {
+                        throw APIError.serverError(apiError.message)
+                    }
+                    if httpResponse.statusCode == 401 { throw APIError.unauthorized }
+                    if httpResponse.statusCode == 404 { throw APIError.notFound }
+                    throw APIError.serverError("HTTP \(httpResponse.statusCode)")
+                }
+                return output.data
+            }
             .decode(type: U.self, decoder: JSONDecoder())
-            .mapError { APIError.networkError($0) }
+            .mapError { error in
+                if let apiError = error as? APIError { return apiError }
+                return APIError.networkError(error)
+            }
             .eraseToAnyPublisher()
     }
     
     // MARK: - Helper Methods
-    private func getAuthToken() -> String {
-        return KeychainManager.shared.getAuthToken() ?? ""
+    private func getAuthToken() -> String? {
+        return KeychainManager.shared.getAuthToken()
     }
     
     private func getDeviceInfo() -> DeviceInfo {

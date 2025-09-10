@@ -31,13 +31,14 @@ struct BookingFlowView: View {
     @State private var specialInstructions = ""
     
     // Step 4
-    @State private var selectedPaymentMethod: PaymentMethod = .card
+    @State private var selectedPaymentMethod: PaymentMethod = .upi
     
     // Payment & UI State
     @State private var isProcessingPayment = false
     @State private var paymentErrorMessage: String? = nil
     @State private var showPaymentError = false
     @State private var showBookingConfirmation = false
+    @State private var preSavedBookingId: String? = nil
     
     // Show previous bookings sheet
     @State private var showPreviousBookings = false
@@ -106,7 +107,7 @@ struct BookingFlowView: View {
                                 .padding(.horizontal, 20)
                             
                             if let pricePerHour = hostService.price_per_hour {
-                                Text(String(format: "$%.2f / hr", pricePerHour))
+                                Text(formatCurrency(pricePerHour, code: hostService.currency))
                                     .font(.headline)
                                     .foregroundColor(.secondary)
                             }
@@ -171,9 +172,11 @@ struct BookingFlowView: View {
                                 onDateOrTimeChanged: { /* trigger UI update if needed */ },
                                 onBack: {
                                     withAnimation { currentStep -= 1 }
+                                    triggerHapticImpact()
                                 },
                                 onNext: {
                                     withAnimation { currentStep += 1 }
+                                    triggerHapticImpact()
                                 },
                                 canProceed: canProceedToNextStep()
                             )
@@ -226,11 +229,10 @@ struct BookingFlowView: View {
                     Spacer()
                     
                     // Updated bottom bar:
-                    // For Step 1 and Steps >= 2 (excluding Step 2), show back/cancel/next/pay buttons here
-                    
-                    // If service is provided, skip Step 0 for navigation buttons
-                    if (service == nil && (currentStep == 0 || currentStep >= 2)) ||
-                        (service != nil && currentStep >= 1) {
+                    // Ensure a visible Next button at Step 0 when a host service is preselected.
+                    // Avoid duplicating controls on Step 1 (Date & Time) because that step has its own toolbar.
+                    if (currentStep != 1) && ( (service == nil && (currentStep == 0 || currentStep >= 2)) ||
+                        (service != nil && currentStep >= 0) ) {
                         HStack {
                             if currentStep == 1 && service == nil {
                                 // Removed Cancel button here (moved to navigation bar)
@@ -248,6 +250,7 @@ struct BookingFlowView: View {
                             Button(action: {
                                 if currentStep < 3 {
                                     withAnimation { currentStep += 1 }
+                                    triggerHapticImpact()
                                 } else {
                                     startRazorpayPayment()
                                 }
@@ -377,6 +380,8 @@ struct BookingFlowView: View {
     private func startRazorpayPayment() {
         guard !isProcessingPayment else { return }
         isProcessingPayment = true
+        // Pre-save a pending booking before starting payment (best-effort)
+        Task { _ = await ensurePreSavedBooking() }
         
         let amountInPaise = Int(calculateTotalPrice() * 100) // Razorpay amount in paise (INR)
         
@@ -419,19 +424,41 @@ struct BookingFlowView: View {
             // TODO: Add more options if needed (e.g., order_id, notes, address etc.)
         ]
         
-        // Present Razorpay checkout modally from the top UIViewController
-        if let rootViewController = UIApplication.shared.windows.first?.rootViewController {
-            razorpayInstance.open(options, displayController: rootViewController)
+        // Find top-most view controller to present Razorpay
+        let rootVC: UIViewController? = (
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow }?
+                .rootViewController
+        )
+        if let presenter = topViewController(from: rootVC) {
+            razorpayInstance.open(options, displayController: presenter)
         } else {
-            // Fallback if rootViewController not found
             isProcessingPayment = false
             paymentErrorMessage = "Unable to present payment gateway."
             showPaymentError = true
         }
     }
+
+    // Resolve the top-most view controller for presentation
+    private func topViewController(from root: UIViewController?) -> UIViewController? {
+        guard let root = root else { return nil }
+        if let nav = root as? UINavigationController {
+            return topViewController(from: nav.visibleViewController)
+        }
+        if let tab = root as? UITabBarController {
+            return topViewController(from: tab.selectedViewController)
+        }
+        if let presented = root.presentedViewController {
+            return topViewController(from: presented)
+        }
+        return root
+    }
     
     private func handleRazorpayPaymentSuccess() {
         Task {
+            await markBookingPaidIfNeeded()
             await saveBookingAfterPurchase()
         }
     }
@@ -489,7 +516,8 @@ struct BookingFlowView: View {
             longitude: nil as Double?,
             status: .pending,
             price: priceToUse * Double(selectedDuration),
-            userNotes: specialInstructions
+            userNotes: specialInstructions,
+            paymentStatus: selectedPaymentMethod == .upi ? "paid_upi" : "paid"
         )
         
         let saved = await saveBookingToSupabase(bookingData: bookingData)
@@ -497,9 +525,11 @@ struct BookingFlowView: View {
         if saved {
             NotificationHelper.scheduleBookingConfirmedNotification(for: bookingData)
             showBookingConfirmation = true
+            triggerHapticSuccess()
         } else {
             paymentErrorMessage = "Failed to save your booking. Please try again."
             showPaymentError = true
+            triggerHapticError()
         }
     }
     
@@ -521,6 +551,68 @@ struct BookingFlowView: View {
             print("Supabase error: \(error)")
             return false
         }
+    }
+
+    // MARK: - Pre-save and status update
+    private func ensurePreSavedBooking() async -> String? {
+        if let id = preSavedBookingId { return id }
+        let calendar = Calendar.current
+        var startComponents = calendar.dateComponents([.year,.month,.day], from: selectedDate)
+        let timeComponents = calendar.dateComponents([.hour,.minute], from: selectedTime)
+        startComponents.hour = timeComponents.hour
+        startComponents.minute = timeComponents.minute
+        let startTime = calendar.date(from: startComponents) ?? selectedDate
+        let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
+        let userId = authService.currentUser?.id ?? "mock-user-id"
+        let providerId = service?.id ?? "provider-id-1"
+        let pricePerHour = service?.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
+        let pendingBooking = BookingData(
+            id: UUID().uuidString,
+            userId: userId,
+            providerId: providerId,
+            serviceType: service != nil ? (ServiceType(rawValue: service?.service_type ?? selectedService.rawValue) ?? selectedService) : selectedService,
+            date: selectedDate,
+            startTime: startTime,
+            endTime: endTime,
+            durationHours: selectedDuration,
+            location: location,
+            latitude: nil as Double?,
+            longitude: nil as Double?,
+            status: .pending,
+            price: pricePerHour * Double(selectedDuration),
+            userNotes: specialInstructions,
+            paymentStatus: "initiated"
+        )
+        do {
+            let id = try await SupabaseService.shared.createBooking(pendingBooking)
+            preSavedBookingId = id
+            return id
+        } catch {
+            print("Pre-save booking failed: \(error)")
+            return nil
+        }
+    }
+
+    private func markBookingPaidIfNeeded() async {
+        guard let id = preSavedBookingId else { return }
+        do {
+            try await SupabaseService.shared.updateBookingStatusAndPayment(id: id, status: .confirmed, paymentStatus: "paid")
+        } catch {
+            print("Failed to update booking payment status: \(error)")
+        }
+    }
+
+    // MARK: - Haptics
+    private func triggerHapticImpact() { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+    private func triggerHapticSuccess() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    private func triggerHapticError() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
+
+    // MARK: - Currency Formatting
+    private func formatCurrency(_ amount: Double, code: String?) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        if let code = code { f.currencyCode = code }
+        return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
     }
 }
 
@@ -544,6 +636,7 @@ class RazorpayCheckoutCoordinator: NSObject, RazorpayPaymentCompletionProtocolWi
 // MARK: - PaymentMethod Enum
 
 enum PaymentMethod: String, CaseIterable, Identifiable {
+    case upi = "UPI"
     case card = "Card"
     case applePay = "Apple Pay"
     
@@ -661,11 +754,11 @@ struct DateTimeSelectionStep: View {
     var canProceed: Bool
     
     @State private var hasInteracted = false
-    @State private var manualTime: String = ""
-    @State private var timeFormatError: String? = nil
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
             HStack(spacing: 8) {
                 Image(systemName: "calendar")
                     .foregroundColor(.green)
@@ -698,8 +791,6 @@ struct DateTimeSelectionStep: View {
                             // Set selectedTime to 9 AM on the new date
                             if let nineAM = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: newDate) {
                                 selectedTime = nineAM
-                                manualTime = formatTime(selectedTime)
-                                timeFormatError = nil
                             }
                         }
                     }
@@ -710,37 +801,34 @@ struct DateTimeSelectionStep: View {
                         .font(.headline)
                         .foregroundColor(.secondary)
                     
-                    TextField("HH:mm", text: $manualTime)
-                        .keyboardType(.numbersAndPunctuation)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .accessibilityIdentifier("manualTimeTextField")
-                        .onChange(of: manualTime) { newValue in
+                    DatePicker("Select Time", selection: $selectedTime, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                        .accessibilityIdentifier("compactTimePicker")
+                        .onChange(of: selectedTime) { _ in
                             hasInteracted = true
-                            if let date = parseManualTime(newValue) {
-                                selectedTime = date
-                                timeFormatError = nil
-                                onDateOrTimeChanged?()
-                            } else {
-                                timeFormatError = "Enter time as HH:mm (e.g., 09:30)"
-                            }
+                            onDateOrTimeChanged?()
                         }
                     
-                    if let timeFormatError = timeFormatError {
-                        HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                                .accessibilityHidden(true)
-                            Text(timeFormatError)
-                                .foregroundColor(.red)
-                                .font(.footnote)
-                                .accessibilityIdentifier("timeFormatError")
+                    HStack(spacing: 10) {
+                        ForEach([30, 60, 120], id: \.self) { minutes in
+                            Button("+\(minutes == 60 ? "1h" : minutes == 120 ? "2h" : "30m")") {
+                                let newDate = Calendar.current.date(byAdding: .minute, value: minutes, to: Date()) ?? Date()
+                                selectedDate = newDate
+                                selectedTime = newDate
+                                onDateOrTimeChanged?()
+                            }
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(8)
                         }
-                        .padding(.bottom, 8)
                     }
                 }
             }
             
-            if showValidationError && hasInteracted && timeFormatError == nil {
+            if showValidationError && hasInteracted {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.red)
@@ -754,8 +842,9 @@ struct DateTimeSelectionStep: View {
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            
-            Spacer(minLength: 0)
+                }
+                .padding(.vertical)
+            }
             
             HStack {
                 Button(action: {
@@ -779,43 +868,10 @@ struct DateTimeSelectionStep: View {
                 .disabled(!canProceed)
                 .accessibilityIdentifier("nextButtonStep2")
             }
-            .padding(.top, 20)
+            .padding(.horizontal)
+            .padding(.vertical, 12)
         }
         .padding(.vertical)
-        .onAppear {
-            manualTime = formatTime(selectedTime)
-            timeFormatError = nil
-        }
-    }
-    
-    private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
-    }
-    
-    private func parseManualTime(_ input: String) -> Date? {
-        // Validate HH:mm 24-hour format
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        let regex = try! NSRegularExpression(pattern: #"^([01]\d|2[0-3]):([0-5]\d)$"#)
-        let range = NSRange(location: 0, length: trimmed.utf16.count)
-        guard regex.firstMatch(in: trimmed, options: [], range: range) != nil else {
-            return nil
-        }
-        
-        let components = trimmed.split(separator: ":")
-        guard components.count == 2,
-              let hour = Int(components[0]),
-              let minute = Int(components[1]) else {
-            return nil
-        }
-        
-        let calendar = Calendar.current
-        var dateComponents = calendar.dateComponents([.year, .month, .day], from: selectedDate)
-        dateComponents.hour = hour
-        dateComponents.minute = minute
-        
-        return calendar.date(from: dateComponents)
     }
 }
 
