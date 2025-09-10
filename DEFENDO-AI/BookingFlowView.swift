@@ -12,10 +12,14 @@ struct BookingFlowView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var authService: AuthService
     
+    // Optional HostService passed for bookings coming from a host's listing
+    let service: HostService?
+    
     @State private var currentStep = 0
     
     // Step 1
-    @State private var selectedService: ServiceType = .securityGuard
+    // If service provided, use its default serviceType, else default to securityGuard
+    @State private var selectedService: ServiceType
     
     // Step 2
     @State private var selectedDate = Date()
@@ -44,28 +48,121 @@ struct BookingFlowView: View {
     
     let steps = ["Select Service", "Date & Time", "Duration & Location", "Confirm & Pay"]
     
+    init(service: HostService? = nil) {
+        self.service = service
+        // Initialize selectedService from service if available, else default
+        if let svc = service {
+            _selectedService = State(initialValue: ServiceType(rawValue: svc.service_type ?? "") ?? .securityGuard)
+        } else {
+            _selectedService = State(initialValue: .securityGuard)
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
                 Color(UIColor.systemGroupedBackground).edgesIgnoringSafeArea(.all)
                 VStack(spacing: 0) {
-                    ProgressBarView(currentStep: currentStep, steps: steps)
+                    // Show custom header if service is provided, else show progress bar and generic title
+                    if let hostService = service {
+                        // Custom header with image and name, price if available
+                        VStack(spacing: 8) {
+                            if let imageUrlString = hostService.images?.first, let url = URL(string: imageUrlString) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                            .frame(width: 140, height: 140)
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 140, height: 140)
+                                            .clipShape(RoundedRectangle(cornerRadius: 20))
+                                            .shadow(radius: 5)
+                                    case .failure(_):
+                                        Image(systemName: "photo")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 140, height: 140)
+                                            .foregroundColor(.gray)
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
+                            } else {
+                                Image(systemName: "shield.lefthalf.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 140, height: 140)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Text(hostService.service_name)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 20)
+                            
+                            if let pricePerHour = hostService.price_per_hour {
+                                Text(String(format: "$%.2f / hr", pricePerHour))
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         .padding(.top)
-                        .padding(.horizontal)
-                        .accentColor(.blue)
+                        .padding(.bottom, 10)
+                    } else {
+                        // Show progress bar with generic "Book Service" title
+                        ProgressBarView(currentStep: currentStep, steps: steps)
+                            .padding(.top)
+                            .padding(.horizontal)
+                            .accentColor(.blue)
+                    }
                     
                     Group {
                         switch currentStep {
                         case 0:
-                            ServiceSelectionStep(selectedService: $selectedService)
-                                .padding(.horizontal)
-                                .padding(.top, 12)
+                            // If HostService is provided, skip service selection step and show a summary instead
+                            if service != nil {
+                                VStack(spacing: 12) {
+                                    HStack {
+                                        Image(systemName: "info.circle")
+                                            .foregroundColor(.blue)
+                                        Text("Service Selected")
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
+                                    }
+                                    Text(service?.service_name ?? selectedService.rawValue)
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                    
+                                    if let pricePerHour = service?.price_per_hour {
+                                        Text(String(format: "$%.2f / hr", pricePerHour))
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
                                 .background(
                                     RoundedRectangle(cornerRadius: 24)
                                         .fill(Color(UIColor.secondarySystemBackground))
                                         .shadow(radius: 7, y: 2)
                                 )
                                 .padding(.horizontal)
+                            } else {
+                                // Normal service selection step
+                                ServiceSelectionStep(selectedService: $selectedService)
+                                    .padding(.horizontal)
+                                    .padding(.top, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 24)
+                                            .fill(Color(UIColor.secondarySystemBackground))
+                                            .shadow(radius: 7, y: 2)
+                                    )
+                                    .padding(.horizontal)
+                            }
                         case 1:
                             DateTimeSelectionStep(
                                 selectedDate: $selectedDate,
@@ -109,7 +206,8 @@ struct BookingFlowView: View {
                                 location: location,
                                 specialInstructions: specialInstructions,
                                 selectedPaymentMethod: $selectedPaymentMethod,
-                                totalPrice: calculateTotalPrice()
+                                totalPrice: calculateTotalPrice(),
+                                hostService: service // Pass host service for more detail in confirmation
                             )
                             .padding(.horizontal)
                             .padding(.top, 12)
@@ -130,9 +228,11 @@ struct BookingFlowView: View {
                     // Updated bottom bar:
                     // For Step 1 and Steps >= 2 (excluding Step 2), show back/cancel/next/pay buttons here
                     
-                    if currentStep == 0 || currentStep >= 2 {
+                    // If service is provided, skip Step 0 for navigation buttons
+                    if (service == nil && (currentStep == 0 || currentStep >= 2)) ||
+                        (service != nil && currentStep >= 1) {
                         HStack {
-                            if currentStep == 1 {
+                            if currentStep == 1 && service == nil {
                                 // Removed Cancel button here (moved to navigation bar)
                             } else if currentStep > 0 {
                                 Button(action: { withAnimation { currentStep -= 1 } }) {
@@ -175,7 +275,7 @@ struct BookingFlowView: View {
                     }
                 }
             }
-            .navigationTitle("Book Service")
+            .navigationTitle(service != nil ? service?.service_name ?? "Book Service" : "Book Service")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -211,7 +311,8 @@ struct BookingFlowView: View {
                     time: selectedTime,
                     duration: selectedDuration,
                     location: location,
-                    price: calculateTotalPrice()
+                    price: calculateTotalPrice(),
+                    hostService: service // Pass host service for confirmation view
                 )
             }
             .sheet(isPresented: $showPreviousBookings) {
@@ -233,6 +334,10 @@ struct BookingFlowView: View {
     private func canProceedToNextStep() -> Bool {
         switch currentStep {
         case 0:
+            // If host service is provided, step 0 is skipped, so always true here
+            if service != nil {
+                return true
+            }
             // Selected service is always valid since default is set
             return true
             
@@ -307,8 +412,7 @@ struct BookingFlowView: View {
             ],
             "theme": [
                 "color": "#3399cc"
-            ]
-            ,
+            ],
             "notes": [
                 "qr_code_id": "qr_REBKIrPN7MM76x"
             ]
@@ -351,14 +455,31 @@ struct BookingFlowView: View {
         startComponents.minute = timeComponents.minute
         let startTime = calendar.date(from: startComponents) ?? selectedDate
         let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
-        let userId = authService.currentUser?.id ?? "mock-user-id"
-        let providerId = "provider-id-1"
         
+        // Use the real user id or fallback mock
+        let userId = authService.currentUser?.id ?? "mock-user-id"
+        
+        // If host service is provided, use its id for providerId and service_type, else fallback to demo values
+        let providerId: String
+        let serviceTypeRaw: String
+        let priceToUse: Double
+        
+        if let hostService = service {
+            providerId = hostService.id
+            serviceTypeRaw = hostService.service_type ?? selectedService.rawValue
+            priceToUse = hostService.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
+        } else {
+            providerId = "provider-id-1"
+            serviceTypeRaw = selectedService.rawValue
+            priceToUse = calculateTotalPrice() / Double(selectedDuration)
+        }
+        
+        // Create booking with host service info if available
         let bookingData = BookingData(
             id: UUID().uuidString,
             userId: userId,
             providerId: providerId,
-            serviceType: selectedService,
+            serviceType: ServiceType(rawValue: serviceTypeRaw) ?? selectedService,
             date: selectedDate,
             startTime: startTime,
             endTime: endTime,
@@ -367,7 +488,7 @@ struct BookingFlowView: View {
             latitude: nil as Double?,
             longitude: nil as Double?,
             status: .pending,
-            price: calculateTotalPrice(),
+            price: priceToUse * Double(selectedDuration),
             userNotes: specialInstructions
         )
         
@@ -382,9 +503,14 @@ struct BookingFlowView: View {
         }
     }
     
+    // Calculate total price using host service price if available, else fallback
     private func calculateTotalPrice() -> Double {
-        let hourlyRate = selectedService == .securityGuard ? 25.0 : 35.0
-        return hourlyRate * Double(selectedDuration)
+        if let hostService = service, let pricePerHour = hostService.price_per_hour {
+            return pricePerHour * Double(selectedDuration)
+        } else {
+            let hourlyRate = selectedService == .securityGuard ? 25.0 : 35.0
+            return hourlyRate * Double(selectedDuration)
+        }
     }
     
     private func saveBookingToSupabase(bookingData: BookingData) async -> Bool {
@@ -802,6 +928,8 @@ struct ConfirmPaymentStep: View {
     @Binding var selectedPaymentMethod: PaymentMethod
     let totalPrice: Double
     
+    let hostService: HostService? // Optional host service to show additional details
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
@@ -816,7 +944,20 @@ struct ConfirmPaymentStep: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 20) {
-                    infoRow(iconName: "shield.lefthalf.fill", iconColor: .blue, title: "Service", subtitle: selectedService.rawValue)
+                    // Show service info from hostService if available, otherwise fallback
+                    if let hostService = hostService {
+                        infoRow(iconName: "shield.lefthalf.fill", iconColor: .blue, title: "Service", subtitle: hostService.service_name)
+                        
+                        if !(hostService.specializations ?? []).isEmpty {
+                            infoRow(iconName: "star.fill", iconColor: .yellow, title: "Specializations", subtitle: (hostService.specializations ?? []).joined(separator: ", "))
+                        }
+                        
+                        if !(hostService.city ?? "").isEmpty {
+                            infoRow(iconName: "building.2.fill", iconColor: .secondary, title: "City", subtitle: hostService.city ?? "")
+                        }
+                    } else {
+                        infoRow(iconName: "shield.lefthalf.fill", iconColor: .blue, title: "Service", subtitle: selectedService.rawValue)
+                    }
                     
                     infoRow(iconName: "calendar", iconColor: .green, title: "Date", subtitle: selectedDate.formatted(date: .long, time: .omitted))
                     
@@ -858,7 +999,11 @@ struct ConfirmPaymentStep: View {
                     HStack {
                         Text("Hourly Rate:")
                         Spacer()
-                        Text("$\(selectedService == .securityGuard ? "25" : "35")")
+                        if let hostService = hostService, let price = hostService.price_per_hour {
+                            Text(String(format: "$%.2f", price))
+                        } else {
+                            Text(selectedService == .securityGuard ? "$25" : "$35")
+                        }
                     }
                     HStack {
                         Text("Duration:")
@@ -984,6 +1129,8 @@ struct BookingConfirmationView: View {
     let location: String
     let price: Double
     
+    let hostService: HostService? // Optional host service for extended info
+    
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -1004,7 +1151,20 @@ struct BookingConfirmationView: View {
                 .accessibilityIdentifier("bookingConfirmedTitle")
             
             VStack(alignment: .leading, spacing: 20) {
-                confirmationRow(title: "Service:", value: serviceType.rawValue)
+                if let hostService = hostService {
+                    confirmationRow(title: "Service:", value: hostService.service_name)
+                    
+                    if !(hostService.specializations ?? []).isEmpty {
+                        confirmationRow(title: "Specializations:", value: (hostService.specializations ?? []).joined(separator: ", "))
+                    }
+                    
+                    if !(hostService.city ?? "").isEmpty {
+                        confirmationRow(title: "City:", value: hostService.city ?? "")
+                    }
+                } else {
+                    confirmationRow(title: "Service:", value: serviceType.rawValue)
+                }
+                
                 confirmationRow(title: "Date:", value: date.formatted(date: .long, time: .omitted))
                 confirmationRow(title: "Time:", value: time.formatted(date: .omitted, time: .shortened))
                 confirmationRow(title: "Duration:", value: "\(duration) hour\(duration == 1 ? "" : "s")")
@@ -1081,3 +1241,4 @@ struct NotificationHelper {
         // Placeholder: Schedule booking notification
     }
 }
+

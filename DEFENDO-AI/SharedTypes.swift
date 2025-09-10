@@ -225,3 +225,13 @@ extension SeverityLevel {
     }
 }
 
+// MARK: - Marketplace Provider
+struct MarketplaceProvider: Identifiable, Codable {
+    let id: String
+    let name: String
+    let type: String
+    let rating: Double
+    let price: Double
+    let verified: Bool
+    let tags: [String]?
+}

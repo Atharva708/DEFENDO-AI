@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MapKit
+import Supabase
 
 struct RootView: View {
     @EnvironmentObject var appState: AppState
@@ -166,6 +167,8 @@ struct DashboardView: View {
                 .tag(1)
             
             MarketplaceView()
+                .environmentObject(appState)
+                .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "magnifyingglass")
                     Text("Explore")
@@ -588,18 +591,7 @@ struct FullMapView: View {
     }
 }
 
-// MARK: - Button Styles
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(12)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-    }
-}
+
 
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
