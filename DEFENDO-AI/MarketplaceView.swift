@@ -454,9 +454,13 @@ struct ServiceCardView: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(.secondarySystemBackground), Color(.secondarySystemBackground).opacity(0.9)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 6)
         )
     }
 }
@@ -485,8 +489,11 @@ struct HostServiceDetailView: View {
                             case .empty:
                                 ProgressView().frame(height: 200)
                             case .success(let img):
-                                img.resizable().scaledToFill().frame(height: 200)
-                                    .clipped().cornerRadius(18)
+                                img.resizable().scaledToFill()
+                                    .frame(height: 220)
+                                    .clipped()
+                                    .cornerRadius(24)
+                                    .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 8)
                             case .failure(_):
                                 Image(systemName: "photo").frame(height: 200)
                             @unknown default:
@@ -495,7 +502,7 @@ struct HostServiceDetailView: View {
                         }
                     }
                     Text(service.service_name)
-                        .font(.title).fontWeight(.bold)
+                        .font(.largeTitle).fontWeight(.bold)
                     if let desc = service.description {
                         Text(desc).font(.body)
                     }

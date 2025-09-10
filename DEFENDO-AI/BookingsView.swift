@@ -6,9 +6,14 @@
 //
 
 import SwiftUI
+import Combine
 
 struct BookingsView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
+    @State private var bookings: [BookingData] = []
+    @State private var isLoading = false
+    @State private var loadError: String? = nil
     @State private var selectedFilter = "All"
     @State private var searchText = ""
     
@@ -38,47 +43,67 @@ struct BookingsView: View {
                 
                 // Bookings List
                 ScrollView {
-                    LazyVStack(spacing: 15) {
-                        ForEach(getFilteredBookings(), id: \.id) { booking in
-                            BookingCard(booking: booking)
+                    if isLoading {
+                        ProgressView().padding()
+                    } else if let error = loadError {
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle").foregroundColor(.red)
+                            Text(error).font(.footnote).foregroundColor(.secondary)
+                            Button("Retry") { Task { await loadBookings() } }
+                                .buttonStyle(PrimaryButtonStyle())
+                        }.padding()
+                    } else {
+                        LazyVStack(spacing: 15) {
+                            ForEach(getFilteredBookings(), id: \.id) { booking in
+                                BookingCardDynamic(booking: booking)
+                            }
                         }
+                        .padding()
                     }
-                    .padding()
                 }
             }
             .navigationTitle("My Bookings")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(Color.black, for: .navigationBar)
             .searchable(text: $searchText, prompt: "Search bookings...")
+            .onAppear { Task { await loadBookings() } }
         }
     }
     
-    private func getFilteredBookings() -> [Booking] {
-        // Mock data - in real app this would come from API
-        let allBookings = [
-            Booking(id: "1", serviceType: .securityGuard, provider: "Elite Security Services", date: Date().addingTimeInterval(86400), duration: 4, location: "Downtown Office", status: .confirmed, price: 100.0),
-            Booking(id: "2", serviceType: .dronePatrol, provider: "SkyWatch Drones", date: Date().addingTimeInterval(-86400), duration: 2, location: "Residential Area", status: .completed, price: 70.0),
-            Booking(id: "3", serviceType: .securityGuard, provider: "Guardian Protection", date: Date().addingTimeInterval(172800), duration: 8, location: "Corporate Building", status: .pending, price: 200.0),
-            Booking(id: "4", serviceType: .dronePatrol, provider: "Aerial Security", date: Date().addingTimeInterval(-172800), duration: 1, location: "Shopping Mall", status: .cancelled, price: 35.0)
-        ]
-        
+    private func getFilteredBookings() -> [BookingData] {
+        let all = bookings.filter { booking in
+            searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            booking.location.localizedCaseInsensitiveContains(searchText) ||
+            booking.serviceType.rawValue.localizedCaseInsensitiveContains(searchText)
+        }
         switch selectedFilter {
         case "Upcoming":
-            return allBookings.filter { $0.status == .pending || $0.status == .confirmed }
+            return all.filter { $0.status == .pending || $0.status == .confirmed }
         case "In Progress":
-            return allBookings.filter { $0.status == .inProgress }
+            return all.filter { $0.status == .inProgress }
         case "Completed":
-            return allBookings.filter { $0.status == .completed }
+            return all.filter { $0.status == .completed }
         case "Cancelled":
-            return allBookings.filter { $0.status == .cancelled }
+            return all.filter { $0.status == .cancelled }
         default:
-            return allBookings
+            return all
+        }
+    }
+
+    private func loadBookings() async {
+        guard let userId = authService.currentUser?.id else { return }
+        await MainActor.run { isLoading = true; loadError = nil }
+        do {
+            let result = try await SupabaseService.shared.getBookings(userId: userId)
+            await MainActor.run { self.bookings = result; self.isLoading = false }
+        } catch {
+            await MainActor.run { self.loadError = error.localizedDescription; self.isLoading = false }
         }
     }
 }
 
-struct BookingCard: View {
-    let booking: Booking
+struct BookingCardDynamic: View {
+    let booking: BookingData
     @EnvironmentObject var appState: AppState
     
     var body: some View {
@@ -90,7 +115,7 @@ struct BookingCard: View {
                     .font(.title2)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(booking.provider)
+                    Text(booking.providerId)
                         .font(.headline)
                         .fontWeight(.medium)
                     
@@ -107,9 +132,9 @@ struct BookingCard: View {
             // Details
             VStack(alignment: .leading, spacing: 8) {
                 DetailRow(icon: "calendar", text: formatDate(booking.date))
-                DetailRow(icon: "clock", text: "\(booking.duration) hours")
+                DetailRow(icon: "clock", text: "\(booking.durationHours) hours")
                 DetailRow(icon: "location", text: booking.location)
-                DetailRow(icon: "dollarsign.circle", text: "$\(String(format: "%.0f", booking.price))")
+                DetailRow(icon: "dollarsign.circle", text: currencyString(booking.price, code: nil))
             }
             
             // Actions
@@ -190,6 +215,14 @@ struct DetailRow: View {
                 .foregroundColor(.secondary)
         }
     }
+}
+
+// Currency helper
+private func currencyString(_ amount: Double, code: String?) -> String {
+    let f = NumberFormatter()
+    f.numberStyle = .currency
+    if let code = code { f.currencyCode = code }
+    return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
 }
 
 #Preview {

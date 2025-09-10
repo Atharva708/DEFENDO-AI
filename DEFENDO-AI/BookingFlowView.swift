@@ -383,7 +383,7 @@ struct BookingFlowView: View {
         // Pre-save a pending booking before starting payment (best-effort)
         Task { _ = await ensurePreSavedBooking() }
         
-        let amountInPaise = Int(calculateTotalPrice() * 100) // Razorpay amount in paise (INR)
+        let amountInPaise = Int(calculateSubtotal() * 100) // Razorpay amount in paise (INR, without GST)
         
         // Razorpay Key ID (test)
         let razorpayKey = "rzp_test_RDymBSsTitkLdn"
@@ -501,7 +501,7 @@ struct BookingFlowView: View {
             priceToUse = calculateTotalPrice() / Double(selectedDuration)
         }
         
-        // Create booking with host service info if available
+        // Create booking payload (used for local confirmation display or fallback create)
         let bookingData = BookingData(
             id: UUID().uuidString,
             userId: userId,
@@ -519,8 +519,14 @@ struct BookingFlowView: View {
             userNotes: specialInstructions,
             paymentStatus: selectedPaymentMethod == .upi ? "paid_upi" : "paid"
         )
-        
-        let saved = await saveBookingToSupabase(bookingData: bookingData)
+
+        // If we pre-saved, don't create a duplicate; just show confirmation
+        let saved: Bool
+        if preSavedBookingId != nil {
+            saved = true
+        } else {
+            saved = await saveBookingToSupabase(bookingData: bookingData)
+        }
         isProcessingPayment = false
         if saved {
             NotificationHelper.scheduleBookingConfirmedNotification(for: bookingData)
@@ -535,6 +541,15 @@ struct BookingFlowView: View {
     
     // Calculate total price using host service price if available, else fallback
     private func calculateTotalPrice() -> Double {
+        if let hostService = service, let pricePerHour = hostService.price_per_hour {
+            return pricePerHour * Double(selectedDuration)
+        } else {
+            let hourlyRate = selectedService == .securityGuard ? 25.0 : 35.0
+            return hourlyRate * Double(selectedDuration)
+        }
+    }
+    
+    private func calculateSubtotal() -> Double {
         if let hostService = service, let pricePerHour = hostService.price_per_hour {
             return pricePerHour * Double(selectedDuration)
         } else {
@@ -638,7 +653,6 @@ class RazorpayCheckoutCoordinator: NSObject, RazorpayPaymentCompletionProtocolWi
 enum PaymentMethod: String, CaseIterable, Identifiable {
     case upi = "UPI"
     case card = "Card"
-    case applePay = "Apple Pay"
     
     var id: String { rawValue }
 }
@@ -1050,31 +1064,12 @@ struct ConfirmPaymentStep: View {
                 .padding()
                 .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.tertiarySystemBackground)))
                 
-                // Price Breakdown
-                VStack(spacing: 12) {
-                    HStack {
-                        Text("Hourly Rate:")
-                        Spacer()
-                        if let hostService = hostService, let price = hostService.price_per_hour {
-                            Text(String(format: "$%.2f", price))
-                        } else {
-                            Text(selectedService == .securityGuard ? "$25" : "$35")
-                        }
-                    }
-                    HStack {
-                        Text("Duration:")
-                        Spacer()
-                        Text("\(selectedDuration) hour\(selectedDuration == 1 ? "" : "s")")
-                    }
-                    Divider()
-                    HStack {
-                        Text("Total:")
-                            .font(.headline)
-                        Spacer()
-                        Text(String(format: "$%.2f", totalPrice))
-                            .font(.headline)
-                    }
-                }
+                // Price Breakdown with GST/tax (INR)
+                PriceBreakdownView(
+                    hourlyRate: hostService?.price_per_hour ?? (selectedService == .securityGuard ? 25.0 : 35.0),
+                    durationHours: selectedDuration,
+                    currencyCode: hostService?.currency ?? "INR"
+                )
                 .padding()
                 .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
                 
@@ -1104,6 +1099,64 @@ struct ConfirmPaymentStep: View {
             }
             Spacer()
         }
+    }
+}
+
+// MARK: - Price Breakdown View (GST/tax for INR)
+struct PriceBreakdownView: View {
+    let hourlyRate: Double
+    let durationHours: Int
+    let currencyCode: String
+    // Example GST 18% (CGST 9% + SGST 9%) only when INR
+    private var gstRate: Double { currencyCode.uppercased() == "INR" ? 0.18 : 0.0 }
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text("Hourly Rate:")
+                Spacer()
+                Text(currencyString(hourlyRate, code: currencyCode))
+            }
+            HStack {
+                Text("Duration:")
+                Spacer()
+                Text("\(durationHours) hour\(durationHours == 1 ? "" : "s")")
+            }
+            Divider()
+            HStack {
+                Text("Subtotal:")
+                Spacer()
+                Text(currencyString(subtotal, code: currencyCode))
+            }
+            if gstRate > 0 {
+                HStack {
+                    Text("GST (18%):")
+                    Spacer()
+                    Text(currencyString(tax, code: currencyCode))
+                }
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            }
+            Divider()
+            HStack {
+                Text("Total Payable:")
+                    .font(.headline)
+                Spacer()
+                Text(currencyString(total, code: currencyCode))
+                    .font(.headline)
+            }
+        }
+    }
+    
+    private var subtotal: Double { hourlyRate * Double(durationHours) }
+    private var tax: Double { subtotal * gstRate }
+    private var total: Double { subtotal + tax }
+    
+    private func currencyString(_ amount: Double, code: String) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = code
+        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
     }
 }
 

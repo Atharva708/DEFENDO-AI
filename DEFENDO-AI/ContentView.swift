@@ -322,43 +322,55 @@ struct QuickActionCard: View {
 
 // MARK: - Recent Bookings Card
 struct RecentBookingsCard: View {
+    @EnvironmentObject var authService: AuthService
+    @State private var bookings: [BookingData] = []
+    @State private var isLoading = false
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
             Text("Recent Bookings")
                 .font(.headline)
             
-            ForEach(0..<2) { _ in
-                HStack {
-                    Image(systemName: "person.fill")
-                        .foregroundColor(.blue)
-                    
-                    VStack(alignment: .leading) {
-                        Text("Security Guard")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Text("Downtown Office • 4 hours")
+            if isLoading {
+                ProgressView()
+            } else {
+                ForEach(bookings.prefix(2)) { booking in
+                    HStack {
+                        Image(systemName: booking.serviceType == .securityGuard ? "person.fill" : "eye.fill")
+                            .foregroundColor(.blue)
+                        
+                        VStack(alignment: .leading) {
+                            Text(booking.serviceType == .securityGuard ? "Security Guard" : booking.serviceType.rawValue.capitalized)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Text("\(booking.location) • \(booking.durationHours) hours")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Text(booking.status.rawValue.capitalized)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
-                    Spacer()
-                    
-                    Button("Rebook") {
-                        // Handle rebook
-                    }
-                    .font(.caption)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .padding(.vertical, 5)
                 }
-                .padding(.vertical, 5)
             }
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+        .onAppear {
+            guard let userId = authService.currentUser?.id else { return }
+            isLoading = true
+            Task {
+                if let list = try? await SupabaseService.shared.getBookings(userId: userId) {
+                    bookings = list
+                }
+                isLoading = false
+            }
+        }
     }
 }
 
