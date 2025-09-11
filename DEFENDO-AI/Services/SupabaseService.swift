@@ -248,6 +248,9 @@ class SupabaseService: ObservableObject {
         await Task.yield() // Ensures no blocking on main thread
 
         let now = DateFormats.rfc3339.string(from: Date())
+        // Build legacy required fields present in current DB schema
+        let legacyDateRFC3339 = DateFormats.rfc3339.string(from: booking.startTime)
+        let legacyDuration = booking.durationHours
         // Conditionally include extended payment fields based on feature flag
         let bookingData = BookingInsert(
             id: booking.id,
@@ -269,7 +272,9 @@ class SupabaseService: ObservableObject {
             user_notes: booking.userNotes,
             payment_id: AppConfig.Features.useExtendedPaymentFields ? booking.paymentId : nil,
             payment_gateway: AppConfig.Features.useExtendedPaymentFields ? booking.paymentGateway : nil,
-            payment_meta: AppConfig.Features.useExtendedPaymentFields ? booking.paymentMeta : nil
+            payment_meta: AppConfig.Features.useExtendedPaymentFields ? booking.paymentMeta : nil,
+            date: legacyDateRFC3339,
+            duration: legacyDuration
         )
 
         _ = try await client
@@ -563,6 +568,10 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let payment_id: String?
     let payment_gateway: String?
     let payment_meta: String?
+
+    // Added legacy date and duration optional fields
+    let date: String?
+    let duration: Int?
 }
 
 nonisolated(unsafe) struct BookingStatusPaymentUpdate: Codable, Sendable {
