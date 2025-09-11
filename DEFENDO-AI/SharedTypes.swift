@@ -161,6 +161,40 @@ enum BookingStatus: String, CaseIterable, Codable, Sendable {
     case cancelled = "cancelled"
 }
 
+// MARK: - DB Mapping Helpers
+extension ServiceType {
+    var dbValue: String {
+        return self.rawValue // bookings.service_type expects camelCase like "securityGuard"
+    }
+    static func fromDb(_ value: String) -> ServiceType {
+        switch value {
+        case "securityGuard", "security_guard": return .securityGuard
+        case "bodyguard": return .bodyguard
+        case "dronePatrol", "drone_patrol": return .dronePatrol
+        case "surveillance": return .surveillance
+        case "escort": return .escort
+        case "emergency": return .emergency
+        default: return .securityGuard
+        }
+    }
+}
+
+extension BookingStatus {
+    var dbValue: String {
+        return self.rawValue // schema allows free text; keep camelCase for inProgress
+    }
+    static func fromDb(_ value: String) -> BookingStatus {
+        switch value {
+        case "pending": return .pending
+        case "confirmed": return .confirmed
+        case "in_progress", "inProgress": return .inProgress
+        case "completed": return .completed
+        case "cancelled": return .cancelled
+        default: return .pending
+        }
+    }
+}
+
 // MARK: - Booking
 struct Booking: Identifiable, Codable, Sendable {
     let id: String

@@ -248,11 +248,12 @@ class SupabaseService: ObservableObject {
         await Task.yield() // Ensures no blocking on main thread
 
         let now = DateFormats.rfc3339.string(from: Date())
+        // Conditionally include extended payment fields based on feature flag
         let bookingData = BookingInsert(
             id: booking.id,
             user_id: booking.userId,
             provider_id: booking.providerId,
-            service_type: booking.serviceType.rawValue,
+            service_type: booking.serviceType.dbValue,
             booking_date: DateFormats.ymd.string(from: booking.date),
             start_time: DateFormats.timeHMS.string(from: booking.startTime),
             end_time: DateFormats.timeHMS.string(from: booking.endTime),
@@ -260,15 +261,15 @@ class SupabaseService: ObservableObject {
             location: booking.location,
             latitude: booking.latitude as Double?,
             longitude: booking.longitude as Double?,
-            status: booking.status.rawValue,
+            status: booking.status.dbValue,
             price: booking.price,
             payment_status: booking.paymentStatus,
             created_at: now,
             updated_at: now,
             user_notes: booking.userNotes,
-            payment_id: booking.paymentId,            // Added paymentId for transaction tracking
-            payment_gateway: booking.paymentGateway,  // Added paymentGateway for transaction tracking
-            payment_meta: booking.paymentMeta         // Added paymentMeta for transaction tracking
+            payment_id: AppConfig.Features.useExtendedPaymentFields ? booking.paymentId : nil,
+            payment_gateway: AppConfig.Features.useExtendedPaymentFields ? booking.paymentGateway : nil,
+            payment_meta: AppConfig.Features.useExtendedPaymentFields ? booking.paymentMeta : nil
         )
 
         _ = try await client
@@ -282,7 +283,7 @@ class SupabaseService: ObservableObject {
     // Update booking status and payment_status columns
     func updateBookingStatusAndPayment(id: String, status: BookingStatus, paymentStatus: String) async throws {
         let payload = BookingStatusPaymentUpdate(
-            status: status.rawValue,
+            status: status.dbValue,
             payment_status: paymentStatus,
             updated_at: DateFormats.rfc3339.string(from: Date())
         )
@@ -316,7 +317,7 @@ class SupabaseService: ObservableObject {
                 id: row.id,
                 userId: row.user_id,
                 providerId: row.provider_id,
-                serviceType: ServiceType(rawValue: row.service_type) ?? .securityGuard,
+                serviceType: ServiceType.fromDb(row.service_type),
                 date: date,
                 startTime: startTime,
                 endTime: endTime,
@@ -324,7 +325,7 @@ class SupabaseService: ObservableObject {
                 location: row.location,
                 latitude: row.latitude,
                 longitude: row.longitude,
-                status: BookingStatus(rawValue: row.status) ?? .pending,
+                status: BookingStatus.fromDb(row.status),
                 price: row.price,
                 userNotes: row.user_notes,
                 paymentStatus: row.payment_status,
