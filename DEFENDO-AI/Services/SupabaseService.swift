@@ -254,7 +254,10 @@ class SupabaseService: ObservableObject {
             payment_status: booking.paymentStatus,
             created_at: now,
             updated_at: now,
-            user_notes: booking.userNotes
+            user_notes: booking.userNotes,
+            payment_id: booking.paymentId,            // Added paymentId for transaction tracking
+            payment_gateway: booking.paymentGateway,  // Added paymentGateway for transaction tracking
+            payment_meta: booking.paymentMeta         // Added paymentMeta for transaction tracking
         )
 
         _ = try await client
@@ -313,7 +316,10 @@ class SupabaseService: ObservableObject {
                 status: BookingStatus(rawValue: row.status) ?? .pending,
                 price: row.price,
                 userNotes: row.user_notes,
-                paymentStatus: row.payment_status
+                paymentStatus: row.payment_status,
+                paymentId: row.payment_id,            // Added paymentId for transaction tracking
+                paymentGateway: row.payment_gateway,  // Added paymentGateway for transaction tracking
+                paymentMeta: row.payment_meta         // Added paymentMeta for transaction tracking
             )
         }
     }
@@ -439,6 +445,11 @@ nonisolated(unsafe) struct BookingRow: Codable, Sendable {
     let created_at: String
     let updated_at: String
     let user_notes: String?
+
+    // Added paymentId, paymentGateway, paymentMeta for transaction tracking.
+    let payment_id: String?
+    let payment_gateway: String?
+    let payment_meta: String?
 }
 
 // Host service row as stored in Supabase
@@ -533,6 +544,11 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let created_at: String
     let updated_at: String
     let user_notes: String?
+
+    // Added paymentId, paymentGateway, paymentMeta for transaction tracking.
+    let payment_id: String?
+    let payment_gateway: String?
+    let payment_meta: String?
 }
 
 nonisolated(unsafe) struct BookingStatusPaymentUpdate: Codable, Sendable {
@@ -587,6 +603,11 @@ struct BookingData: Identifiable, Sendable {
     let price: Double
     let userNotes: String?
     let paymentStatus: String
+
+    // Added paymentId, paymentGateway, paymentMeta for transaction tracking.
+    let paymentId: String?
+    let paymentGateway: String?
+    let paymentMeta: String?
 }
 
 struct LocationHistoryData: Sendable {

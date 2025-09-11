@@ -305,6 +305,10 @@ struct BookingFlowView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
+            /*
+            Removed fullScreenCover for booking confirmation,
+            as now we auto-navigate to Booking screen upon successful payment.
+             
             .fullScreenCover(isPresented: $showBookingConfirmation, onDismiss: {
                 appState.currentScreen = .dashboard
             }) {
@@ -318,6 +322,7 @@ struct BookingFlowView: View {
                     hostService: service // Pass host service for confirmation view
                 )
             }
+            */
             .sheet(isPresented: $showPreviousBookings) {
                 PreviousBookingsView()
                     .environmentObject(authService)
@@ -393,8 +398,8 @@ struct BookingFlowView: View {
         
         // Initialize coordinator with success and failure handlers
         let coordinator = RazorpayCheckoutCoordinator(
-            onSuccess: {
-                handleRazorpayPaymentSuccess()
+            onSuccess: { paymentId, paymentMeta in
+                handleRazorpayPaymentSuccess(paymentId: paymentId, paymentMeta: paymentMeta)
             },
             onFailure: { errorMessage in
                 handleRazorpayPaymentFailure(error: errorMessage)
@@ -456,10 +461,10 @@ struct BookingFlowView: View {
         return root
     }
     
-    private func handleRazorpayPaymentSuccess() {
+    private func handleRazorpayPaymentSuccess(paymentId: String?, paymentMeta: [AnyHashable: Any]?) {
         Task {
             await markBookingPaidIfNeeded()
-            await saveBookingAfterPurchase()
+            await saveBookingAfterPurchase(paymentId: paymentId, paymentMeta: paymentMeta)
         }
     }
     
@@ -474,7 +479,7 @@ struct BookingFlowView: View {
     // MARK: - Booking Save
     
     @MainActor
-    private func saveBookingAfterPurchase() async {
+    private func saveBookingAfterPurchase(paymentId: String?, paymentMeta: [AnyHashable: Any]?) async {
         let calendar = Calendar.current
         var startComponents = calendar.dateComponents([.year,.month,.day], from: selectedDate)
         let timeComponents = calendar.dateComponents([.hour,.minute], from: selectedTime)
@@ -501,6 +506,20 @@ struct BookingFlowView: View {
             priceToUse = calculateTotalPrice() / Double(selectedDuration)
         }
         
+        // Save payment details to bookings table for transaction tracking.
+        let paymentIdString = paymentId ?? ""
+        let paymentMetaString: String
+        if let meta = paymentMeta {
+            if let data = try? JSONSerialization.data(withJSONObject: meta, options: []),
+               let jsonString = String(data: data, encoding: .utf8) {
+                paymentMetaString = jsonString
+            } else {
+                paymentMetaString = "\(meta)"
+            }
+        } else {
+            paymentMetaString = ""
+        }
+        
         // Create booking payload (used for local confirmation display or fallback create)
         let bookingData = BookingData(
             id: UUID().uuidString,
@@ -517,7 +536,10 @@ struct BookingFlowView: View {
             status: .pending,
             price: priceToUse * Double(selectedDuration),
             userNotes: specialInstructions,
-            paymentStatus: selectedPaymentMethod == .upi ? "paid_upi" : "paid"
+            paymentStatus: selectedPaymentMethod == .upi ? "paid_upi" : "paid",
+            paymentId: paymentIdString,
+            paymentGateway: "Razorpay",
+            paymentMeta: paymentMetaString
         )
 
         // If we pre-saved, don't create a duplicate; just show confirmation
@@ -530,7 +552,8 @@ struct BookingFlowView: View {
         isProcessingPayment = false
         if saved {
             NotificationHelper.scheduleBookingConfirmedNotification(for: bookingData)
-            showBookingConfirmation = true
+            // Instead of showing confirmation sheet, automatically switch to Booking tab
+            appState.currentScreen = .booking
             triggerHapticSuccess()
         } else {
             paymentErrorMessage = "Failed to save your booking. Please try again."
@@ -596,7 +619,10 @@ struct BookingFlowView: View {
             status: .pending,
             price: pricePerHour * Double(selectedDuration),
             userNotes: specialInstructions,
-            paymentStatus: "initiated"
+            paymentStatus: "initiated",
+            paymentId: nil,
+            paymentGateway: nil,
+            paymentMeta: nil
         )
         do {
             let id = try await SupabaseService.shared.createBooking(pendingBooking)
@@ -634,14 +660,14 @@ struct BookingFlowView: View {
 // MARK: - RazorpayCheckoutCoordinator
 
 class RazorpayCheckoutCoordinator: NSObject, RazorpayPaymentCompletionProtocolWithData {
-    let onSuccess: () -> Void
+    let onSuccess: (_ paymentId: String?, _ paymentMeta: [AnyHashable: Any]?) -> Void
     let onFailure: (String) -> Void
-    init(onSuccess: @escaping () -> Void, onFailure: @escaping (String) -> Void) {
+    init(onSuccess: @escaping (_ paymentId: String?, _ paymentMeta: [AnyHashable: Any]?) -> Void, onFailure: @escaping (String) -> Void) {
         self.onSuccess = onSuccess
         self.onFailure = onFailure
     }
     func onPaymentSuccess(_ payment_id: String?, andData response: [AnyHashable : Any]?) {
-        onSuccess()
+        onSuccess(payment_id, response)
     }
     func onPaymentError(_ code: Int32, description str: String, andData response: [AnyHashable : Any]?) {
         onFailure(str)

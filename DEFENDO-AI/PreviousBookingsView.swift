@@ -130,6 +130,11 @@ private struct BookingDetailSheet: View {
                     detailRow(label: "Provider", value: booking.providerId)
                     detailRow(label: "Status", value: booking.status.rawValue.capitalized)
                     detailRow(label: "Total", value: String(format: "$%.2f", booking.price))
+                    
+                    // Display transaction/payment details for transparency.
+                    detailRow(label: "Payment Gateway", value: booking.paymentGateway ?? "-")
+                    detailRow(label: "Payment ID", value: booking.paymentId ?? "-")
+                    detailRow(label: "Payment Meta", value: (booking.paymentMeta?.count ?? 0) > 100 ? String(booking.paymentMeta!.prefix(100)) + "..." : (booking.paymentMeta ?? "-"))
                 }
             }
             .padding()

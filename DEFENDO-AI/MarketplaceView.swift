@@ -220,7 +220,10 @@ struct NewBookingFlowView: View, Identifiable {
             status: .pending,
             price: totalPrice,
             userNotes: userNotes.isEmpty ? nil : userNotes,
-            paymentStatus: "pending"
+            paymentStatus: "pending",
+            paymentId: nil,
+            paymentGateway: nil,
+            paymentMeta: nil,
         )
 
         Task {
@@ -546,3 +549,4 @@ struct HostServiceDetailView: View {
         }
     }
 }
+
