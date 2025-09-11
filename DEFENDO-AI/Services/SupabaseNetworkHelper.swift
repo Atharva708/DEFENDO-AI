@@ -7,34 +7,45 @@
 
 import Foundation
 import UIKit
+import Supabase
 
 // MARK: - Supabase REST API Helper
 
 struct SupabaseREST {
-    // Set these with your actual project values
-    static let projectURL = URL(string: "https://YOUR-SUPABASE-PROJECT.supabase.co/rest/v1/bookings")! // <--- Replace!
-    static let apiKey = "YOUR_SUPABASE_API_KEY" // <--- Replace with your key
+    /// Builds the REST endpoint for a given table
+    static func tableURL(_ table: String) throws -> URL {
+        guard !AppConfig.Supabase.url.isEmpty,
+              let base = URL(string: AppConfig.Supabase.url) else {
+            throw NetworkError.invalidResponse
+        }
+        return base.appendingPathComponent("rest/v1/")
+                   .appendingPathComponent(table)
+    }
 
-    /// Returns default headers for Supabase REST API requests
-    static func defaultHeaders() -> [String: String] {
+    /// Returns REST headers for Supabase with user JWT for RLS
+    static func authHeaders(userAccessToken: String) -> [String: String] {
         [
-            "apikey": apiKey,
-            "Authorization": "Bearer \(apiKey)",
+            "apikey": AppConfig.Supabase.anonKey,
+            "Authorization": "Bearer \(userAccessToken)",
             "Content-Type": "application/json",
             "Accept": "application/json"
         ]
     }
 
-    /// POST a booking (or any Codable payload) to Supabase
-    static func postBooking<T: Codable>(_ object: T, timeout: TimeInterval = 10.0) async throws -> Data {
-        var request = URLRequest(url: projectURL)
+    /// POST a row (or any Codable payload) to a Supabase table using the logged-in user's token
+    static func postRow<T: Codable>(to table: String, object: T, timeout: TimeInterval = 10.0) async throws -> Data {
+        let url = try tableURL(table)
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.allHTTPHeaderFields = defaultHeaders()
+
+        // Acquire current user's access token for RLS
+        let session = try await client.auth.session
+        request.allHTTPHeaderFields = authHeaders(userAccessToken: session.accessToken)
+
         request.timeoutInterval = timeout
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.httpBody = try JSONEncoder().encode([object]) // Supabase expects array for bulk insert
 
-        // Use non-main queue for request
         return try await withCheckedThrowingContinuation { continuation in
             URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error as? URLError {
