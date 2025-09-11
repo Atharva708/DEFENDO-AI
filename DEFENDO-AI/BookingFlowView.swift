@@ -553,10 +553,7 @@ struct BookingFlowView: View {
             status: .pending,
             price: priceToUse * Double(selectedDuration),
             userNotes: specialInstructions,
-            paymentStatus: selectedPaymentMethod == .upi ? "paid_upi" : "paid",
-            paymentId: paymentIdString,
-            paymentGateway: "Razorpay",
-            paymentMeta: paymentMetaString
+            paymentStatus: selectedPaymentMethod == .upi ? "paid_upi" : "paid"
         )
 
         // If we pre-saved, don't create a duplicate; just show confirmation
@@ -649,10 +646,7 @@ struct BookingFlowView: View {
             status: .pending,
             price: pricePerHour * Double(selectedDuration),
             userNotes: specialInstructions,
-            paymentStatus: "initiated",
-            paymentId: nil,
-            paymentGateway: nil,
-            paymentMeta: nil
+            paymentStatus: "initiated"
         )
         do {
             let id = try await SupabaseService.shared.createBooking(pendingBooking)

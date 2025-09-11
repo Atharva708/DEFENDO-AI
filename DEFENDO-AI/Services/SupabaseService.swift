@@ -251,36 +251,73 @@ class SupabaseService: ObservableObject {
         // Build legacy required fields present in current DB schema
         let legacyDateRFC3339 = DateFormats.rfc3339.string(from: booking.startTime)
         let legacyDuration = booking.durationHours
-        // Conditionally include extended payment fields based on feature flag
+
         let bookingData = BookingInsert(
             id: booking.id,
             user_id: booking.userId,
             provider_id: booking.providerId,
             service_type: booking.serviceType.dbValue,
+            date: legacyDateRFC3339,               // Legacy date string (timestamptz or string)
+            duration: legacyDuration,               // Legacy duration hours
+            location: booking.location,
+            status: booking.status.dbValue,
+            price: booking.price,
+            created_at: now,
             booking_date: DateFormats.ymd.string(from: booking.date),
             start_time: DateFormats.timeHMS.string(from: booking.startTime),
             end_time: DateFormats.timeHMS.string(from: booking.endTime),
             duration_hours: booking.durationHours,
-            location: booking.location,
-            latitude: booking.latitude as Double?,
-            longitude: booking.longitude as Double?,
-            status: booking.status.dbValue,
-            price: booking.price,
+            latitude: booking.latitude,
+            longitude: booking.longitude,
             payment_status: booking.paymentStatus,
-            created_at: now,
             updated_at: now,
             user_notes: booking.userNotes,
-            payment_id: AppConfig.Features.useExtendedPaymentFields ? booking.paymentId : nil,
-            payment_gateway: AppConfig.Features.useExtendedPaymentFields ? booking.paymentGateway : nil,
-            payment_meta: AppConfig.Features.useExtendedPaymentFields ? booking.paymentMeta : nil,
-            date: legacyDateRFC3339,
-            duration: legacyDuration
+            // Persist currency as INR for all current bookings
+            currency: "INR",
+            // Best-effort inference of payment method from paymentStatus
+            payment_method: {
+                let status = booking.paymentStatus.lowercased()
+                if status.contains("upi") { return "UPI" }
+                if status.contains("card") { return "CARD" }
+                return nil
+            }(),
+            transaction_id: nil,
+            refund_id: nil,
+            host_payout_status: nil,
+            payout_date: nil
         )
 
-        _ = try await client
-            .from("bookings")
-            .insert(bookingData)
-            .execute()
+        do {
+            _ = try await client
+                .from("bookings")
+                .insert(bookingData)
+                .execute()
+            if AppConfig.Features.enableDetailedLogging {
+                print("[Bookings] SDK insert succeeded for id=\(booking.id)")
+            }
+        } catch {
+            // Fallback: if the SDK insert times out or faces transient network issues,
+            // attempt a direct REST insert with a slightly longer timeout.
+            if let urlError = error as? URLError, urlError.code == .timedOut {
+                do {
+                    _ = try await SupabaseREST.postRow(to: "bookings", object: bookingData, timeout: 15.0)
+                    if AppConfig.Features.enableDetailedLogging {
+                        print("[Bookings] REST fallback insert succeeded for id=\(booking.id)")
+                    }
+                } catch let netErr as NetworkError {
+                    // Treat duplicate key conflict as success for idempotency (row likely created already)
+                    if case .serverError(let code) = netErr, code == 409 {
+                        if AppConfig.Features.enableDetailedLogging {
+                            print("[Bookings] REST fallback returned 409 conflict; treating as success for id=\(booking.id)")
+                        }
+                    } else {
+                        throw netErr
+                    }
+                }
+            } else {
+                throw error
+            }
+        }
 
         return booking.id
     }
@@ -309,7 +346,7 @@ class SupabaseService: ObservableObject {
             .order("start_time", ascending: false)
             .execute()
 
-        return response.value.compactMap { row in
+        return response.value.compactMap { row -> BookingData? in
             guard
                 let date = DateFormats.ymd.date(from: row.booking_date),
                 let startTime = DateFormats.timeHMS.date(from: row.start_time),
@@ -334,9 +371,7 @@ class SupabaseService: ObservableObject {
                 price: row.price,
                 userNotes: row.user_notes,
                 paymentStatus: row.payment_status,
-                paymentId: row.payment_id,            // Added paymentId for transaction tracking
-                paymentGateway: row.payment_gateway,  // Added paymentGateway for transaction tracking
-                paymentMeta: row.payment_meta         // Added paymentMeta for transaction tracking
+                    // No longer present in DB schema
             )
         }
     }
@@ -451,24 +486,29 @@ nonisolated(unsafe) struct BookingRow: Codable, Sendable {
     let user_id: String
     let provider_id: String
     let service_type: String
-    let booking_date: String
-    let start_time: String
-    let end_time: String
-    let duration_hours: Int
+    let date: String?            // Legacy date string, optional
+    let duration: Int?           // Legacy duration hours, optional
     let location: String
-    let latitude: Double?
-    let longitude: Double?
     let status: String
     let price: Double
-    let payment_status: String
     let created_at: String
+    let booking_date: String     // yyyy-MM-dd
+    let start_time: String       // HH:mm:ss
+    let end_time: String         // HH:mm:ss
+    let duration_hours: Int
+    let latitude: Double?
+    let longitude: Double?
+    let payment_status: String
     let updated_at: String
     let user_notes: String?
 
-    // Added paymentId, paymentGateway, paymentMeta for transaction tracking.
-    let payment_id: String?
-    let payment_gateway: String?
-    let payment_meta: String?
+    // New optional fields due to DB schema additions
+    let currency: String?
+    let payment_method: String?
+    let transaction_id: String?
+    let refund_id: String?
+    let host_payout_status: String?
+    let payout_date: String?
 }
 
 // Host service row as stored in Supabase
@@ -550,28 +590,33 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let user_id: String
     let provider_id: String
     let service_type: String
-    let booking_date: String
-    let start_time: String
-    let end_time: String
-    let duration_hours: Int
+
+    // Legacy optional fields
+    let date: String?
+    let duration: Int?
+
     let location: String
-    let latitude: Double?
-    let longitude: Double?
     let status: String
     let price: Double
-    let payment_status: String
     let created_at: String
+
+    let booking_date: String       // yyyy-MM-dd
+    let start_time: String         // HH:mm:ss
+    let end_time: String           // HH:mm:ss
+    let duration_hours: Int
+    let latitude: Double?
+    let longitude: Double?
+    let payment_status: String
     let updated_at: String
     let user_notes: String?
 
-    // Added paymentId, paymentGateway, paymentMeta for transaction tracking.
-    let payment_id: String?
-    let payment_gateway: String?
-    let payment_meta: String?
-
-    // Added legacy date and duration optional fields
-    let date: String?
-    let duration: Int?
+    // New optional fields added in DB schema
+    let currency: String?
+    let payment_method: String?
+    let transaction_id: String?
+    let refund_id: String?
+    let host_payout_status: String?
+    let payout_date: String?
 }
 
 nonisolated(unsafe) struct BookingStatusPaymentUpdate: Codable, Sendable {
@@ -627,10 +672,10 @@ struct BookingData: Identifiable, Sendable {
     let userNotes: String?
     let paymentStatus: String
 
-    // Added paymentId, paymentGateway, paymentMeta for transaction tracking.
-    let paymentId: String?
-    let paymentGateway: String?
-    let paymentMeta: String?
+    // Removed paymentId, paymentGateway, paymentMeta as they do not exist in DB schema anymore.
+    let paymentId: String? = nil
+    let paymentGateway: String? = nil
+    let paymentMeta: String? = nil
 }
 
 struct LocationHistoryData: Sendable {
