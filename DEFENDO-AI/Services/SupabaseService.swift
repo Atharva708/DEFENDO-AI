@@ -4,10 +4,13 @@
 //
 //  Real Supabase integration with proper data models
 //
+//  See SupabaseNetworkHelper.swift for REST booking POSTs and file loader.
+//
 
 import Foundation
 import Supabase
 import Combine
+import UIKit
 
 // MARK: - Shared Date Formatters
 
@@ -235,7 +238,15 @@ class SupabaseService: ObservableObject {
 
     // MARK: - Bookings
 
+    /// Creates a new booking.
+    /// Note: To avoid blocking the main thread, yields control to the scheduler first.
+    /// - Parameter booking: BookingData to save.
+    /// - Returns: The booking ID on success.
+    /// 
+    /// If using REST API directly, see SupabaseREST.postBooking in SupabaseNetworkHelper.swift.
     func createBooking(_ booking: BookingData) async throws -> String {
+        await Task.yield() // Ensures no blocking on main thread
+
         let now = DateFormats.rfc3339.string(from: Date())
         let bookingData = BookingInsert(
             id: booking.id,
@@ -357,6 +368,8 @@ class SupabaseService: ObservableObject {
 
     // MARK: - Location History
 
+    /// Saves location history record for a user.
+    /// Note: The async nature ensures no blocking; no explicit main thread dispatch needed here.
     func saveLocationHistory(userId: String, location: LocationHistoryData) async throws {
         let locationData = LocationHistoryInsert(
             id: UUID().uuidString,
@@ -631,3 +644,31 @@ extension DateFormatter {
         return formatter
     }()
 }
+
+/// Example function demonstrating safe usage of BundleResourceLoader for default.csv file loading.
+/// Use this to load app bundled CSV resources safely and asynchronously.
+func exampleLoadDefaultCSV() async throws -> String {
+    let data = try BundleResourceLoader.loadFileData(named: "default", ext: "csv")
+    guard let string = String(data: data, encoding: .utf8) else {
+        throw NSError(domain: "BundleResourceLoader", code: 500, userInfo: [NSLocalizedDescriptionKey: "Unable to decode CSV as UTF-8 string"]) 
+    }
+    return string
+}
+
+/// --- Info.plist & Entitlements Checklist ---
+///
+/// Location Usage Description Keys:
+/// - NSLocationWhenInUseUsageDescription
+/// - NSLocationAlwaysAndWhenInUseUsageDescription
+/// - NSLocationAlwaysUsageDescription
+///
+/// Network & Privacy:
+/// - NSAppTransportSecurity (if needed for HTTP exceptions)
+/// - NSAllowsArbitraryLoads (only if necessary)
+///
+/// Metal:
+/// - Required device capabilities: metal
+///
+/// Make sure these keys are added with appropriate user-facing descriptions for location privacy,
+/// network access, and hardware requirements to ensure smooth operation of the app.
+

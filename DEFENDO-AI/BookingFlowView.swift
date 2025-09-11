@@ -480,6 +480,8 @@ struct BookingFlowView: View {
     
     @MainActor
     private func saveBookingAfterPurchase(paymentId: String?, paymentMeta: [AnyHashable: Any]?) async {
+        print("Booking details for saveBookingAfterPurchase:", paymentId as Any, paymentMeta as Any)
+        
         let calendar = Calendar.current
         var startComponents = calendar.dateComponents([.year,.month,.day], from: selectedDate)
         let timeComponents = calendar.dateComponents([.hour,.minute], from: selectedTime)
@@ -488,20 +490,31 @@ struct BookingFlowView: View {
         let startTime = calendar.date(from: startComponents) ?? selectedDate
         let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
         
-        // Use the real user id or fallback mock
-        let userId = authService.currentUser?.id ?? "mock-user-id"
+        // Use the real user id or fallback mock, with warning
+        let userId: String
+        if let currentUserId = authService.currentUser?.id {
+            userId = currentUserId
+        } else {
+            userId = "mock-user-id"
+            print("Warning: Using mock user id!")
+        }
         
-        // If host service is provided, use its id for providerId and service_type, else fallback to demo values
-        let providerId: String
+        // If host service is provided, use host_id for host_id; fallback to hostService.id as safeguard
+        let host_id: String
+        if let hostService = service {
+            host_id = hostService.host_id ?? hostService.id
+        } else {
+            host_id = "provider-id-1"
+            print("Warning: Using mock provider id!")
+        }
+        
         let serviceTypeRaw: String
         let priceToUse: Double
         
         if let hostService = service {
-            providerId = hostService.id
             serviceTypeRaw = hostService.service_type ?? selectedService.rawValue
             priceToUse = hostService.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
         } else {
-            providerId = "provider-id-1"
             serviceTypeRaw = selectedService.rawValue
             priceToUse = calculateTotalPrice() / Double(selectedDuration)
         }
@@ -524,7 +537,7 @@ struct BookingFlowView: View {
         let bookingData = BookingData(
             id: UUID().uuidString,
             userId: userId,
-            providerId: providerId,
+            providerId: host_id, // Changed from host_id to providerId
             serviceType: ServiceType(rawValue: serviceTypeRaw) ?? selectedService,
             date: selectedDate,
             startTime: startTime,
@@ -582,11 +595,18 @@ struct BookingFlowView: View {
     }
     
     private func saveBookingToSupabase(bookingData: BookingData) async -> Bool {
+        print("Attempting to save booking:", bookingData)
         do {
             try await SupabaseService.shared.createBooking(bookingData)
             return true
         } catch {
             print("Supabase error: \(error)")
+            if let supaError = error as? NSError {
+                print("Supabase error domain: \(supaError.domain), code: \(supaError.code), userInfo: \(supaError.userInfo)")
+            }
+            if let localized = (error as? LocalizedError)?.errorDescription {
+                print("Supabase error (localized): \(localized)")
+            }
             return false
         }
     }
@@ -601,13 +621,26 @@ struct BookingFlowView: View {
         startComponents.minute = timeComponents.minute
         let startTime = calendar.date(from: startComponents) ?? selectedDate
         let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
-        let userId = authService.currentUser?.id ?? "mock-user-id"
-        let providerId = service?.id ?? "provider-id-1"
+        let userId: String
+        if let currentUserId = authService.currentUser?.id {
+            userId = currentUserId
+        } else {
+            userId = "mock-user-id"
+            print("Warning: Using mock user id!")
+        }
+        // If host service is provided, use host_id for host_id; fallback to hostService.id as safeguard
+        let host_id: String
+        if let hostService = service {
+            host_id = hostService.host_id ?? hostService.id
+        } else {
+            host_id = "provider-id-1"
+            print("Warning: Using mock provider id!")
+        }
         let pricePerHour = service?.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
         let pendingBooking = BookingData(
             id: UUID().uuidString,
             userId: userId,
-            providerId: providerId,
+            providerId: host_id, // Changed from host_id to providerId
             serviceType: service != nil ? (ServiceType(rawValue: service?.service_type ?? selectedService.rawValue) ?? selectedService) : selectedService,
             date: selectedDate,
             startTime: startTime,
