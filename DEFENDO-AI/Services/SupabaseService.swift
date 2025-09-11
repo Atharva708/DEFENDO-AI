@@ -248,6 +248,9 @@ class SupabaseService: ObservableObject {
         await Task.yield() // Ensures no blocking on main thread
 
         let now = DateFormats.rfc3339.string(from: Date())
+        // Build legacy required fields present in current DB schema
+        let legacyDateRFC3339 = DateFormats.rfc3339.string(from: booking.startTime)
+        let legacyDuration = booking.durationHours
         // Conditionally include extended payment fields based on feature flag
         let bookingData = BookingInsert(
             id: booking.id,
@@ -275,6 +278,10 @@ class SupabaseService: ObservableObject {
         _ = try await client
             .from("bookings")
             .insert(bookingData)
+            .set([
+                "date": legacyDateRFC3339,
+                "duration": legacyDuration
+            ])
             .execute()
 
         return booking.id
