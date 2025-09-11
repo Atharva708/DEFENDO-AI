@@ -625,19 +625,17 @@ struct BookingFlowView: View {
         startComponents.minute = timeComponents.minute
         let startTime = calendar.date(from: startComponents) ?? selectedDate
         let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
-        let userId: String
         guard let userId = authService.currentUser?.id else { return nil }
         // If host service is provided, use host_id for host_id; fallback to hostService.id as safeguard
-        let host_id: String
         guard let service = service else { return nil }
         let host_id = service.host_id ?? service.id
-        let pricePerHour = service?.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
+        let pricePerHour = service.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
         let pendingBooking = BookingData(
             id: UUID().uuidString,
             userId: userId,
             providerId: host_id, // Changed from host_id to providerId
             serviceType: {
-                let raw = service?.service_type ?? selectedService.rawValue
+                let raw = service.service_type ?? selectedService.rawValue
                 let clamped = (raw == ServiceType.securityGuard.rawValue || raw == ServiceType.dronePatrol.rawValue) ? raw : ServiceType.securityGuard.rawValue
                 return ServiceType(rawValue: clamped) ?? .securityGuard
             }(),
