@@ -490,32 +490,36 @@ struct BookingFlowView: View {
         let startTime = calendar.date(from: startComponents) ?? selectedDate
         let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
         
-        // Use the real user id or fallback mock, with warning
-        let userId: String
-        if let currentUserId = authService.currentUser?.id {
-            userId = currentUserId
-        } else {
-            userId = "mock-user-id"
-            print("Warning: Using mock user id!")
+        // Require authenticated user
+        guard let userId = authService.currentUser?.id else {
+            paymentErrorMessage = "Please sign in before booking."
+            showPaymentError = true
+            isProcessingPayment = false
+            return
         }
         
-        // If host service is provided, use host_id for host_id; fallback to hostService.id as safeguard
+        // If host service is provided, resolve provider id; otherwise fail
         let host_id: String
         if let hostService = service {
             host_id = hostService.host_id ?? hostService.id
         } else {
-            host_id = "provider-id-1"
-            print("Warning: Using mock provider id!")
+            paymentErrorMessage = "Please select a service/provider before booking."
+            showPaymentError = true
+            isProcessingPayment = false
+            return
         }
         
         let serviceTypeRaw: String
         let priceToUse: Double
         
         if let hostService = service {
-            serviceTypeRaw = hostService.service_type ?? selectedService.rawValue
+            let raw = hostService.service_type ?? selectedService.rawValue
+            // Clamp to allowed values in bookings.service_type check: securityGuard, dronePatrol
+            serviceTypeRaw = (raw == ServiceType.securityGuard.rawValue || raw == ServiceType.dronePatrol.rawValue) ? raw : ServiceType.securityGuard.rawValue
             priceToUse = hostService.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
         } else {
-            serviceTypeRaw = selectedService.rawValue
+            let raw = selectedService.rawValue
+            serviceTypeRaw = (raw == ServiceType.securityGuard.rawValue || raw == ServiceType.dronePatrol.rawValue) ? raw : ServiceType.securityGuard.rawValue
             priceToUse = calculateTotalPrice() / Double(selectedDuration)
         }
         
@@ -622,26 +626,21 @@ struct BookingFlowView: View {
         let startTime = calendar.date(from: startComponents) ?? selectedDate
         let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
         let userId: String
-        if let currentUserId = authService.currentUser?.id {
-            userId = currentUserId
-        } else {
-            userId = "mock-user-id"
-            print("Warning: Using mock user id!")
-        }
+        guard let userId = authService.currentUser?.id else { return nil }
         // If host service is provided, use host_id for host_id; fallback to hostService.id as safeguard
         let host_id: String
-        if let hostService = service {
-            host_id = hostService.host_id ?? hostService.id
-        } else {
-            host_id = "provider-id-1"
-            print("Warning: Using mock provider id!")
-        }
+        guard let service = service else { return nil }
+        let host_id = service.host_id ?? service.id
         let pricePerHour = service?.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
         let pendingBooking = BookingData(
             id: UUID().uuidString,
             userId: userId,
             providerId: host_id, // Changed from host_id to providerId
-            serviceType: service != nil ? (ServiceType(rawValue: service?.service_type ?? selectedService.rawValue) ?? selectedService) : selectedService,
+            serviceType: {
+                let raw = service?.service_type ?? selectedService.rawValue
+                let clamped = (raw == ServiceType.securityGuard.rawValue || raw == ServiceType.dronePatrol.rawValue) ? raw : ServiceType.securityGuard.rawValue
+                return ServiceType(rawValue: clamped) ?? .securityGuard
+            }(),
             date: selectedDate,
             startTime: startTime,
             endTime: endTime,

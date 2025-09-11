@@ -70,6 +70,16 @@ struct AppConfig {
     
     // MARK: - Feature Flags
     struct Features {
+        static var useExtendedPaymentFields: Bool {
+            switch current {
+            case .development:
+                return false
+            case .staging:
+                return false
+            case .production:
+                return false
+            }
+        }
         static var enableAnalytics: Bool {
             switch current {
             case .development:
