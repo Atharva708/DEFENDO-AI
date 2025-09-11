@@ -272,16 +272,14 @@ class SupabaseService: ObservableObject {
             user_notes: booking.userNotes,
             payment_id: AppConfig.Features.useExtendedPaymentFields ? booking.paymentId : nil,
             payment_gateway: AppConfig.Features.useExtendedPaymentFields ? booking.paymentGateway : nil,
-            payment_meta: AppConfig.Features.useExtendedPaymentFields ? booking.paymentMeta : nil
+            payment_meta: AppConfig.Features.useExtendedPaymentFields ? booking.paymentMeta : nil,
+            date: legacyDateRFC3339,
+            duration: legacyDuration
         )
 
         _ = try await client
             .from("bookings")
             .insert(bookingData)
-            .set([
-                "date": legacyDateRFC3339,
-                "duration": legacyDuration
-            ])
             .execute()
 
         return booking.id
@@ -570,6 +568,10 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let payment_id: String?
     let payment_gateway: String?
     let payment_meta: String?
+
+    // Added legacy date and duration optional fields
+    let date: String?
+    let duration: Int?
 }
 
 nonisolated(unsafe) struct BookingStatusPaymentUpdate: Codable, Sendable {
