@@ -164,13 +164,20 @@ enum BookingStatus: String, CaseIterable, Codable, Sendable {
 // MARK: - DB Mapping Helpers
 extension ServiceType {
     var dbValue: String {
-        return self.rawValue // bookings.service_type expects camelCase like "securityGuard"
+        switch self {
+        case .securityGuard: return "Guard"            // matches bookings.service_type CHECK
+        case .dronePatrol: return "drone"             // matches bookings.service_type CHECK
+        case .bodyguard: return "bodyguard"
+        case .surveillance: return "surveillance"
+        case .escort: return "escort"
+        case .emergency: return "emergency"
+        }
     }
     static func fromDb(_ value: String) -> ServiceType {
         switch value {
-        case "securityGuard", "security_guard": return .securityGuard
+        case "securityGuard", "security_guard", "Guard": return .securityGuard
         case "bodyguard": return .bodyguard
-        case "dronePatrol", "drone_patrol": return .dronePatrol
+        case "dronePatrol", "drone_patrol", "drone": return .dronePatrol
         case "surveillance": return .surveillance
         case "escort": return .escort
         case "emergency": return .emergency
