@@ -14,7 +14,6 @@ struct BookingFlowView: View {
     
     // Optional HostService passed for bookings coming from a host's listing
     let service: HostService?
-    
     @State private var currentStep = 0
     
     // Step 1
@@ -252,7 +251,16 @@ struct BookingFlowView: View {
                                     withAnimation { currentStep += 1 }
                                     triggerHapticImpact()
                                 } else {
-                                    startRazorpayPayment()
+                                    isProcessingPayment = true
+                                    Task {
+                                        if let _ = await ensurePreSavedBooking() {
+                                            startRazorpayPayment()
+                                        } else {
+                                            isProcessingPayment = false
+                                            paymentErrorMessage = "Failed to create booking before payment. Please try again."
+                                            showPaymentError = true
+                                        }
+                                    }
                                 }
                             }) {
                                 if isProcessingPayment {
@@ -652,7 +660,7 @@ struct BookingFlowView: View {
             let id = try await SupabaseService.shared.createBooking(pendingBooking)
             preSavedBookingId = id
             return id
-        } catch {
+        } catch { 
             print("Pre-save booking failed: \(error)")
             return nil
         }

@@ -242,26 +242,34 @@ class SupabaseService: ObservableObject {
     /// Note: To avoid blocking the main thread, yields control to the scheduler first.
     /// - Parameter booking: BookingData to save.
     /// - Returns: The booking ID on success.
-    /// 
     /// If using REST API directly, see SupabaseREST.postBooking in SupabaseNetworkHelper.swift.
     func createBooking(_ booking: BookingData) async throws -> String {
-        await Task.yield() // Ensures no blocking on main thread
+        // Yield to avoid blocking the main thread
+        await Task.yield()
 
+        // Current timestamp in RFC3339 format for created_at and updated_at
         let now = DateFormats.rfc3339.string(from: Date())
-        // Build legacy required fields present in current DB schema
-        let legacyDateRFC3339 = DateFormats.rfc3339.string(from: booking.startTime)
-        let legacyDuration = booking.durationHours
 
+        // Prepare fields with fallback defaults where necessary
+        let userIdOpt: String? = booking.userId.isEmpty ? nil : booking.userId
+        let providerIdOpt: String? = booking.providerId.isEmpty ? nil : booking.providerId
+        let serviceTypeFinal = booking.serviceType.dbValue.isEmpty ? "Guard" : booking.serviceType.dbValue
+        let locationFinal = booking.location.isEmpty ? "Unknown" : booking.location
+        let statusFinal = booking.status.dbValue.isEmpty ? "pending" : booking.status.dbValue
+        let priceFinal = booking.price.isNaN ? 1.0 : booking.price
+        let paymentStatusFinal = booking.paymentStatus.isEmpty ? "pending" : booking.paymentStatus
+
+        // Create the booking insert object with all required fields, matching SQL schema types and optionality
         let bookingData = BookingInsert(
             id: booking.id,
-            user_id: booking.userId,
-            provider_id: booking.providerId,
-            service_type: booking.serviceType.dbValue,
-            date: legacyDateRFC3339,               // Legacy date string (timestamptz or string)
-            duration: legacyDuration,               // Legacy duration hours
-            location: booking.location,
-            status: booking.status.dbValue,
-            price: booking.price,
+            user_id: userIdOpt,
+            provider_id: providerIdOpt,
+            service_type: serviceTypeFinal,
+            date: nil,
+            duration: nil,
+            location: locationFinal,
+            status: statusFinal,
+            price: priceFinal,
             created_at: now,
             booking_date: DateFormats.ymd.string(from: booking.date),
             start_time: DateFormats.timeHMS.string(from: booking.startTime),
@@ -269,23 +277,20 @@ class SupabaseService: ObservableObject {
             duration_hours: booking.durationHours,
             latitude: booking.latitude,
             longitude: booking.longitude,
-            payment_status: booking.paymentStatus,
+            payment_status: paymentStatusFinal,
             updated_at: now,
             user_notes: booking.userNotes,
-            // Persist currency as INR for all current bookings
-            currency: "INR",
-            // Best-effort inference of payment method from paymentStatus
-            payment_method: {
-                let status = booking.paymentStatus.lowercased()
-                if status.contains("upi") { return "UPI" }
-                if status.contains("card") { return "CARD" }
-                return nil
-            }(),
+            currency: nil,
+            payment_method: nil,
             transaction_id: nil,
             refund_id: nil,
             host_payout_status: nil,
             payout_date: nil
         )
+        
+        if AppConfig.Features.enableDetailedLogging {
+            print("[Bookings] Attempting to insert booking: \(bookingData)")
+        }
 
         do {
             _ = try await client
@@ -296,6 +301,10 @@ class SupabaseService: ObservableObject {
                 print("[Bookings] SDK insert succeeded for id=\(booking.id)")
             }
         } catch {
+            if AppConfig.Features.enableDetailedLogging {
+                print("[Bookings] SDK insert failed with error: \(error)")
+                print("[Bookings] Booking data causing error: \(bookingData)")
+            }
             // Fallback: if the SDK insert times out or faces transient network issues,
             // attempt a direct REST insert with a slightly longer timeout.
             if let urlError = error as? URLError, urlError.code == .timedOut {
@@ -305,6 +314,10 @@ class SupabaseService: ObservableObject {
                         print("[Bookings] REST fallback insert succeeded for id=\(booking.id)")
                     }
                 } catch let netErr as NetworkError {
+                    if AppConfig.Features.enableDetailedLogging {
+                        print("[Bookings] REST fallback failed with error: \(netErr)")
+                        print("[Bookings] Booking data causing REST fallback error: \(bookingData)")
+                    }
                     // Treat duplicate key conflict as success for idempotency (row likely created already)
                     if case .serverError(let code) = netErr, code == 409 {
                         if AppConfig.Features.enableDetailedLogging {
@@ -357,8 +370,8 @@ class SupabaseService: ObservableObject {
 
             return BookingData(
                 id: row.id,
-                userId: row.user_id,
-                providerId: row.provider_id,
+                userId: row.user_id ?? "",
+                providerId: row.provider_id ?? "",
                 serviceType: ServiceType.fromDb(row.service_type),
                 date: date,
                 startTime: startTime,
@@ -370,7 +383,7 @@ class SupabaseService: ObservableObject {
                 status: BookingStatus.fromDb(row.status),
                 price: row.price,
                 userNotes: row.user_notes,
-                paymentStatus: row.payment_status,
+                paymentStatus: row.payment_status
                     // No longer present in DB schema
             )
         }
@@ -483,8 +496,8 @@ nonisolated(unsafe) struct SOSAlertRow: Codable, Sendable {
 
 nonisolated(unsafe) struct BookingRow: Codable, Sendable {
     let id: String
-    let user_id: String
-    let provider_id: String
+    let user_id: String?
+    let provider_id: String?
     let service_type: String
     let date: String?            // Legacy date string, optional
     let duration: Int?           // Legacy duration hours, optional
@@ -587,36 +600,36 @@ nonisolated(unsafe) struct SOSAlertUpdate: Codable, Sendable {
 
 nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let id: String
-    let user_id: String
-    let provider_id: String
-    let service_type: String
+    let user_id: String?              // Optional per SQL schema
+    let provider_id: String?          // Optional per SQL schema
+    let service_type: String          // Required string (must match allowed enum)
 
     // Legacy optional fields
-    let date: String?
-    let duration: Int?
+    let date: String?                 // RFC3339 string, optional
+    let duration: Int?                // Legacy duration hours, optional
 
-    let location: String
-    let status: String
-    let price: Double
-    let created_at: String
+    let location: String              // Required
+    let status: String                // Required
+    let price: Double                 // Required
+    let created_at: String            // RFC3339 string, required
 
-    let booking_date: String       // yyyy-MM-dd
-    let start_time: String         // HH:mm:ss
-    let end_time: String           // HH:mm:ss
-    let duration_hours: Int
-    let latitude: Double?
-    let longitude: Double?
-    let payment_status: String
-    let updated_at: String
-    let user_notes: String?
+    let booking_date: String          // yyyy-MM-dd, required
+    let start_time: String            // HH:mm:ss, required
+    let end_time: String              // HH:mm:ss, required
+    let duration_hours: Int           // Required
+    let latitude: Double?             // Optional
+    let longitude: Double?            // Optional
+    let payment_status: String        // Required
+    let updated_at: String            // RFC3339 string, required
+    let user_notes: String?           // Optional
 
     // New optional fields added in DB schema
-    let currency: String?
-    let payment_method: String?
-    let transaction_id: String?
-    let refund_id: String?
-    let host_payout_status: String?
-    let payout_date: String?
+    let currency: String?             // Optional
+    let payment_method: String?      // Optional
+    let transaction_id: String?       // Optional
+    let refund_id: String?            // Optional
+    let host_payout_status: String?  // Optional
+    let payout_date: String?          // RFC3339 string, optional
 }
 
 nonisolated(unsafe) struct BookingStatusPaymentUpdate: Codable, Sendable {
@@ -726,4 +739,5 @@ func exampleLoadDefaultCSV() async throws -> String {
 ///
 /// Make sure these keys are added with appropriate user-facing descriptions for location privacy,
 /// network access, and hardware requirements to ensure smooth operation of the app.
+
 
