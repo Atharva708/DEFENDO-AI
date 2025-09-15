@@ -237,6 +237,29 @@ class ErrorLogger {
         // Always send critical errors to crash reporting
         // TODO: Send to crash reporting service
     }
+
+    /// Prints rich diagnostics for network/SDK errors, including NSError info
+    func logDetailed(_ error: Error, context: [String: Any] = [:], file: String = #file, function: String = #function, line: Int = #line) {
+        let fileName = URL(fileURLWithPath: file).lastPathComponent
+        var lines: [String] = []
+        lines.append("🧩 Error at \(fileName):\(function):\(line)")
+        lines.append("Type: \(type(of: error))")
+        lines.append("Message: \(error.localizedDescription)")
+        if let localized = (error as? LocalizedError)?.errorDescription {
+            lines.append("Localized: \(localized)")
+        }
+        if let ns = error as NSError? {
+            lines.append("NSError: domain=\(ns.domain) code=\(ns.code)")
+            if !ns.userInfo.isEmpty {
+                lines.append("userInfo=\(ns.userInfo)")
+            }
+        }
+        if !context.isEmpty {
+            lines.append("Context=\(context)")
+        }
+        let logMessage = lines.joined(separator: "\n")
+        print(logMessage)
+    }
 }
 
 // MARK: - Error Handler

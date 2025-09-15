@@ -604,13 +604,15 @@ struct BookingFlowView: View {
             try await SupabaseService.shared.createBooking(bookingData)
             return true
         } catch {
-            print("Supabase error: \(error)")
-            if let supaError = error as? NSError {
-                print("Supabase error domain: \(supaError.domain), code: \(supaError.code), userInfo: \(supaError.userInfo)")
-            }
-            if let localized = (error as? LocalizedError)?.errorDescription {
-                print("Supabase error (localized): \(localized)")
-            }
+            ErrorLogger.shared.logDetailed(error, context: [
+                "action": "createBooking",
+                "userId": bookingData.userId,
+                "providerId": bookingData.providerId,
+                "service_type": bookingData.serviceType.dbValue,
+                "booking_date": DateFormats.ymd.string(from: bookingData.date),
+                "start_time": DateFormats.timeHMS.string(from: bookingData.startTime),
+                "duration_hours": bookingData.durationHours
+            ])
             return false
         }
     }
