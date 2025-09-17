@@ -18,8 +18,8 @@ public struct HostService: Identifiable, Codable {
     public let images: [String]?
     public let is_active: Bool?
     public let total_bookings: Int?
-    public let host_id: String?
-    public init(id: String, service_name: String, price: Double?, price_per_hour: Double?, currency: String?, rating: Double?, city: String?, service_type: String?, description: String?, specializations: [String]?, equipment_included: [String]?, images: [String]?, is_active: Bool?, total_bookings: Int?, host_id: String?) {
+    public let provider_id: String?
+    public init(id: String, service_name: String, price: Double?, price_per_hour: Double?, currency: String?, rating: Double?, city: String?, service_type: String?, description: String?, specializations: [String]?, equipment_included: [String]?, images: [String]?, is_active: Bool?, total_bookings: Int?, provider_id: String?) {
         self.id = id
         self.service_name = service_name
         self.price = price
@@ -34,7 +34,7 @@ public struct HostService: Identifiable, Codable {
         self.images = images
         self.is_active = is_active
         self.total_bookings = total_bookings
-        self.host_id = host_id
+        self.provider_id = provider_id
     }
 }
 // END HostService MODEL
@@ -167,7 +167,7 @@ struct NewBookingFlowView: View, Identifiable {
     private var bookingSummary: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(service.service_name).font(.headline)
-            if let provider = service.host_id {
+            if let provider = service.provider_id {
                 Text("Provider ID: \(provider)").font(.caption)
             }
             Text("Date: \(bookingDate.formatted(date: .abbreviated, time: .omitted))")
@@ -198,7 +198,7 @@ struct NewBookingFlowView: View, Identifiable {
             isSubmitting = false
             return
         }
-        let providerID = service.host_id ?? service.id
+        let providerID = service.provider_id ?? service.id
         let now = Date()
         let priceValue = service.price_per_hour ?? service.price ?? 0.0
         let totalPrice = Double(durationHours) * priceValue

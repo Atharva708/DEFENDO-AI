@@ -352,9 +352,9 @@ struct BookingFlowView: View {
         }
         
         // If host service is provided, resolve provider id; otherwise fail
-        let host_id: String
+        let provider_id: String
         if let hostService = service {
-            host_id = hostService.host_id ?? hostService.id
+            provider_id = hostService.provider_id ?? hostService.id
         } else {
             // Show error alert or message
             return
@@ -375,7 +375,7 @@ struct BookingFlowView: View {
         let bookingData = BookingData(
             id: UUID().uuidString,
             userId: userId,
-            providerId: host_id,
+            providerId: provider_id,
             serviceType: selectedService, // Use selectedService instead of .securityGuard
             date: selectedDate,
             startTime: startTime,

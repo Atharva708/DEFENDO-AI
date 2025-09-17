@@ -493,7 +493,7 @@ class SupabaseService: ObservableObject {
                 images: row.images,
                 is_active: row.is_active,
                 total_bookings: row.total_bookings,
-                host_id: row.host_id
+                provider_id: row.provider_id
             )
         }
     }
@@ -618,7 +618,7 @@ nonisolated(unsafe) struct HostServiceRow: Codable, Sendable {
     let images: [String]?
     let is_active: Bool?
     let total_bookings: Int?
-    let host_id: String?
+    let provider_id: String?
     let created_at: String?
     let updated_at: String?
 }
