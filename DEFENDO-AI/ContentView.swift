@@ -336,11 +336,11 @@ struct RecentBookingsCard: View {
             } else {
                 ForEach(bookings.prefix(2)) { booking in
                     HStack {
-                        Image(systemName: booking.serviceType == .securityGuard ? "person.fill" : "eye.fill")
+                        Image(systemName: "eye.fill")
                             .foregroundColor(.blue)
                         
                         VStack(alignment: .leading) {
-                            Text(booking.serviceType == .securityGuard ? "Security Guard" : booking.serviceType.rawValue.capitalized)
+                            Text(booking.serviceType.rawValue.capitalized)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             Text("\(booking.location) • \(booking.durationHours) hours")
@@ -640,3 +640,4 @@ struct AlertsView: View {
     RootView()
         .environmentObject(AppState())
 }
+

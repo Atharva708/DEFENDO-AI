@@ -110,7 +110,7 @@ struct BookingCardDynamic: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Image(systemName: booking.serviceType == .securityGuard ? "person.2.fill" : "eye.fill")
+                Image(systemName: "eye.fill")
                     .foregroundColor(.blue)
                     .font(.title2)
                 
@@ -119,7 +119,7 @@ struct BookingCardDynamic: View {
                         .font(.headline)
                         .fontWeight(.medium)
                     
-                    Text(booking.serviceType == .securityGuard ? "Security Guard" : "Drone Patrol")
+                    Text(booking.serviceType.rawValue)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }

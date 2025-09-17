@@ -82,7 +82,7 @@ struct BookingRowView: View {
     let booking: BookingData
     var body: some View {
         HStack {
-            Image(systemName: booking.serviceType == .securityGuard ? "shield.lefthalf.fill" : "person.fill.checkmark")
+            Image(systemName: "person.fill.checkmark")
                 .foregroundColor(.blue)
                 .font(.title2)
             VStack(alignment: .leading, spacing: 4) {
@@ -109,7 +109,7 @@ private struct BookingDetailSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(spacing: 10) {
-                    Image(systemName: booking.serviceType == .securityGuard ? "shield.lefthalf.fill" : "person.fill.checkmark")
+                    Image(systemName: "person.fill.checkmark")
                         .font(.largeTitle)
                         .foregroundColor(.blue)
                     VStack(alignment: .leading) {
@@ -167,4 +167,3 @@ private struct BookingDetailSheet: View {
         .accessibilityElement(children: .combine)
     }
 }
-

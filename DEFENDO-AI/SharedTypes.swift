@@ -145,7 +145,6 @@ struct IncidentReport: Identifiable, Codable, Sendable {
 
 // MARK: - Service Types
 enum ServiceType: String, CaseIterable, Codable, Sendable {
-    case securityGuard = "securityGuard"
     case bodyguard = "bodyguard"
     case dronePatrol = "dronePatrol"
     case surveillance = "surveillance"
@@ -164,17 +163,22 @@ enum BookingStatus: String, CaseIterable, Codable, Sendable {
 // MARK: - DB Mapping Helpers
 extension ServiceType {
     var dbValue: String {
-        return self.rawValue // bookings.service_type expects camelCase like "securityGuard"
+        switch self {
+        case .bodyguard: return "bodyguard"
+        case .dronePatrol: return "drone_patrol"
+        case .surveillance: return "surveillance"
+        case .escort: return "escort"
+        case .emergency: return "emergency"
+        }
     }
     static func fromDb(_ value: String) -> ServiceType {
         switch value {
-        case "securityGuard", "security_guard": return .securityGuard
         case "bodyguard": return .bodyguard
         case "dronePatrol", "drone_patrol": return .dronePatrol
         case "surveillance": return .surveillance
         case "escort": return .escort
         case "emergency": return .emergency
-        default: return .securityGuard
+        default: return .bodyguard
         }
     }
 }
@@ -269,3 +273,4 @@ struct MarketplaceProvider: Identifiable, Codable {
     let verified: Bool
     let tags: [String]?
 }
+

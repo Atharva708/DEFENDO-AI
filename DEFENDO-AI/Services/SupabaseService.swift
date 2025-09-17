@@ -42,6 +42,27 @@ enum DateFormats {
     }()
 }
 
+/*
+ MARK: - Booking DB Constraints & Field Requirements
+
+ - user_id, provider_id: Optional UUID strings; must be valid UUIDs if present.
+ - service_type: Required; must match one of the DB enum values (e.g., "security_guard", "patrol", "guard").
+   Convert from app ServiceType enum to lowercase underscore-separated strings.
+ - booking_date: Required; formatted as "yyyy-MM-dd".
+ - start_time, end_time: Required; formatted as "HH:mm:ss".
+ - duration_hours: Required; Int representing total duration in hours.
+ - location: Required; non-empty string.
+ - status: Required; one of ["pending", "confirmed", "in_progress", "completed", "cancelled"].
+ - price: Required; positive Double.
+ - payment_status: Required; one of ["pending", "paid", "refunded", "failed"] etc.
+ - created_at, updated_at: Required; RFC3339 formatted datetime strings.
+ - Legacy fields `date` and `duration` are no longer present in DB schema and must be removed.
+ - Optional fields (currency, payment_method, transaction_id, refund_id, host_payout_status, payout_date) are nullable.
+ 
+ Validation is critical as inserting invalid enum values or missing required fields will cause DB constraint violations.
+ Logging detailed errors on failures helps debugging.
+*/
+
 class SupabaseService: ObservableObject {
     static let shared = SupabaseService()
     private let client = SupabaseManager.shared.client
@@ -244,40 +265,88 @@ class SupabaseService: ObservableObject {
     /// - Returns: The booking ID on success.
     /// If using REST API directly, see SupabaseREST.postBooking in SupabaseNetworkHelper.swift.
     func createBooking(_ booking: BookingData) async throws -> String {
-        // Yield to avoid blocking the main thread
+        // Yield control to avoid blocking the main thread
         await Task.yield()
 
-        // Current timestamp in RFC3339 format for created_at and updated_at
+        // Validate and sanitize inputs for DB constraints before creating insert object
+        guard !booking.id.isEmpty else {
+            throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking id must not be empty"])
+        }
+
+        // user_id and provider_id are optional but if present must be valid UUID strings
+        func isValidUUID(_ str: String) -> Bool {
+            UUID(uuidString: str) != nil
+        }
+
+        let userIdOpt = booking.userId.isEmpty ? nil : (isValidUUID(booking.userId) ? booking.userId : nil)
+        let providerIdOpt = booking.providerId.isEmpty ? nil : (isValidUUID(booking.providerId) ? booking.providerId : nil)
+
+        // Normalize serviceType to match DB enum values:
+        // Convert to lowercase and replace camelCase/enum conventions to underscore-separated.
+        // Examples: "securityGuard" or "guard" -> "security_guard" or "guard"
+        // Assuming ServiceType has a dbValue with appropriate format, else do conversion here.
+        var serviceTypeDB = booking.serviceType.dbValue.lowercased()
+        serviceTypeDB = serviceTypeDB.replacingOccurrences(of: " ", with: "_")
+        serviceTypeDB = serviceTypeDB.replacingOccurrences(of: "-", with: "_")
+
+        // Allowed service types per DB schema - Example set (adjust if needed)
+        let allowedServiceTypes = ["security_guard", "guard", "patrol", "cleaning", "delivery"]
+        guard allowedServiceTypes.contains(serviceTypeDB) else {
+            throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking service_type '\(serviceTypeDB)' is not allowed"])
+        }
+
+        // Validate status against allowed DB enum values
+        let statusDB = booking.status.dbValue.lowercased()
+        let allowedStatusValues = ["pending", "confirmed", "in_progress", "completed", "cancelled"]
+        guard allowedStatusValues.contains(statusDB) else {
+            throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking status '\(statusDB)' is not allowed"])
+        }
+
+        // Validate paymentStatus similarly, fallback to 'pending' if invalid
+        var paymentStatusDB = booking.paymentStatus.lowercased()
+        let allowedPaymentStatuses = ["pending", "paid", "refunded", "failed", "cancelled"]
+        if !allowedPaymentStatuses.contains(paymentStatusDB) {
+            paymentStatusDB = "pending"
+        }
+
+        // Validate location string non-empty
+        guard !booking.location.isEmpty else {
+            throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking location must not be empty"])
+        }
+
+        // Validate price - must be non-negative
+        let priceFinal = booking.price.isNaN || booking.price < 0 ? 1.0 : booking.price
+
+        // Validate date fields formatted correctly
+        let bookingDateStr = DateFormats.ymd.string(from: booking.date)
+        let startTimeStr = DateFormats.timeHMS.string(from: booking.startTime)
+        let endTimeStr = DateFormats.timeHMS.string(from: booking.endTime)
+
+        // Validate durationHours non-negative
+        guard booking.durationHours >= 0 else {
+            throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking durationHours must be zero or positive"])
+        }
+
+        // Timestamps for created_at and updated_at
         let now = DateFormats.rfc3339.string(from: Date())
 
-        // Prepare fields with fallback defaults where necessary
-        let userIdOpt: String? = booking.userId.isEmpty ? nil : booking.userId
-        let providerIdOpt: String? = booking.providerId.isEmpty ? nil : booking.providerId
-        let serviceTypeFinal = booking.serviceType.dbValue.isEmpty ? "Guard" : booking.serviceType.dbValue
-        let locationFinal = booking.location.isEmpty ? "Unknown" : booking.location
-        let statusFinal = booking.status.dbValue.isEmpty ? "pending" : booking.status.dbValue
-        let priceFinal = booking.price.isNaN ? 1.0 : booking.price
-        let paymentStatusFinal = booking.paymentStatus.isEmpty ? "pending" : booking.paymentStatus
-
-        // Create the booking insert object with all required fields, matching SQL schema types and optionality
+        // Construct insert payload WITHOUT legacy fields `date` and `duration`
         let bookingData = BookingInsert(
             id: booking.id,
             user_id: userIdOpt,
             provider_id: providerIdOpt,
-            service_type: serviceTypeFinal,
-            date: nil,
-            duration: nil,
-            location: locationFinal,
-            status: statusFinal,
+            service_type: serviceTypeDB,
+            location: booking.location,
+            status: statusDB,
             price: priceFinal,
             created_at: now,
-            booking_date: DateFormats.ymd.string(from: booking.date),
-            start_time: DateFormats.timeHMS.string(from: booking.startTime),
-            end_time: DateFormats.timeHMS.string(from: booking.endTime),
+            booking_date: bookingDateStr,
+            start_time: startTimeStr,
+            end_time: endTimeStr,
             duration_hours: booking.durationHours,
             latitude: booking.latitude,
             longitude: booking.longitude,
-            payment_status: paymentStatusFinal,
+            payment_status: paymentStatusDB,
             updated_at: now,
             user_notes: booking.userNotes,
             currency: nil,
@@ -287,7 +356,7 @@ class SupabaseService: ObservableObject {
             host_payout_status: nil,
             payout_date: nil
         )
-        
+
         if AppConfig.Features.enableDetailedLogging {
             print("[Bookings] Attempting to insert booking: \(bookingData)")
         }
@@ -360,11 +429,21 @@ class SupabaseService: ObservableObject {
             .execute()
 
         return response.value.compactMap { row -> BookingData? in
+            // Required fields validation: booking_date, start_time, end_time, status, payment_status must be present & parseable
             guard
+                !row.booking_date.isEmpty,
+                !row.start_time.isEmpty,
+                !row.end_time.isEmpty,
+                !row.status.isEmpty,
+                !row.payment_status.isEmpty,
                 let date = DateFormats.ymd.date(from: row.booking_date),
                 let startTime = DateFormats.timeHMS.date(from: row.start_time),
                 let endTime = DateFormats.timeHMS.date(from: row.end_time)
             else {
+                // Skip rows with missing or invalid required fields gracefully
+                if AppConfig.Features.enableDetailedLogging {
+                    print("[Bookings] Skipping invalid booking row id=\(row.id) due to missing/invalid date or time fields")
+                }
                 return nil
             }
 
@@ -384,7 +463,6 @@ class SupabaseService: ObservableObject {
                 price: row.price,
                 userNotes: row.user_notes,
                 paymentStatus: row.payment_status
-                    // No longer present in DB schema
             )
         }
     }
@@ -499,8 +577,8 @@ nonisolated(unsafe) struct BookingRow: Codable, Sendable {
     let user_id: String?
     let provider_id: String?
     let service_type: String
-    let date: String?            // Legacy date string, optional
-    let duration: Int?           // Legacy duration hours, optional
+    // Legacy fields removed: date, duration
+
     let location: String
     let status: String
     let price: Double
@@ -604,9 +682,7 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
     let provider_id: String?          // Optional per SQL schema
     let service_type: String          // Required string (must match allowed enum)
 
-    // Legacy optional fields
-    let date: String?                 // RFC3339 string, optional
-    let duration: Int?                // Legacy duration hours, optional
+    // Legacy fields date and duration REMOVED, no longer present in schema
 
     let location: String              // Required
     let status: String                // Required
@@ -625,7 +701,7 @@ nonisolated(unsafe) struct BookingInsert: Codable, Sendable {
 
     // New optional fields added in DB schema
     let currency: String?             // Optional
-    let payment_method: String?      // Optional
+    let payment_method: String?       // Optional
     let transaction_id: String?       // Optional
     let refund_id: String?            // Optional
     let host_payout_status: String?  // Optional
@@ -739,5 +815,4 @@ func exampleLoadDefaultCSV() async throws -> String {
 ///
 /// Make sure these keys are added with appropriate user-facing descriptions for location privacy,
 /// network access, and hardware requirements to ensure smooth operation of the app.
-
 

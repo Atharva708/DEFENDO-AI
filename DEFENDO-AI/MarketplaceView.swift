@@ -209,7 +209,7 @@ struct NewBookingFlowView: View, Identifiable {
             id: bookingIDValue,
             userId: user.id,
             providerId: providerID,
-            serviceType: ServiceType(rawValue: service.service_type ?? "securityGuard") ?? .securityGuard,
+            serviceType: ServiceType(rawValue: service.service_type ?? "bodyguard") ?? .bodyguard,
             date: bookingDate,
             startTime: startTime,
             endTime: endTimeValue,
