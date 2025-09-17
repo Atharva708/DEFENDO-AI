@@ -108,6 +108,14 @@ struct AppConfig {
         }
     }
     
+    // MARK: - Payments & Currency
+    struct Payments {
+        // Default currency code for the app (ISO 4217)
+        static let defaultCurrencyCode: String = "INR"
+        // GST percentage applied to taxable services
+        static let gstPercent: Double = 18.0
+    }
+    
     // MARK: - App Information
     static var appVersion: String {
         return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"

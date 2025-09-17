@@ -289,8 +289,16 @@ class SupabaseService: ObservableObject {
         serviceTypeDB = serviceTypeDB.replacingOccurrences(of: " ", with: "_")
         serviceTypeDB = serviceTypeDB.replacingOccurrences(of: "-", with: "_")
 
-        // Allowed service types per DB schema - Example set (adjust if needed)
-        let allowedServiceTypes = ["bodyguard", "guard", "patrol", "cleaning", "delivery"]
+        // Allowed service types per DB schema - include our app-supported values
+        let allowedServiceTypes = [
+            "bodyguard",
+            "guard",
+            "security_guard",
+            "drone_patrol",
+            "surveillance",
+            "escort",
+            "emergency"
+        ]
         guard allowedServiceTypes.contains(serviceTypeDB) else {
             throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking service_type '\(serviceTypeDB)' is not allowed"])
         }
@@ -331,6 +339,13 @@ class SupabaseService: ObservableObject {
         let now = DateFormats.rfc3339.string(from: Date())
 
         // Construct insert payload WITHOUT legacy fields `date` and `duration`
+        // Sanitize optional strings
+        let userNotesSanitized: String? = {
+            guard let notes = booking.userNotes else { return nil }
+            let trimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }()
+
         let bookingData = BookingInsert(
             id: booking.id,
             user_id: userIdOpt,
@@ -348,10 +363,11 @@ class SupabaseService: ObservableObject {
             longitude: booking.longitude,
             payment_status: paymentStatusDB,
             updated_at: now,
-            user_notes: booking.userNotes,
-            currency: nil,
-            payment_method: nil,
-            transaction_id: nil,
+            user_notes: userNotesSanitized,
+            // Now that the columns exist, populate them
+            currency: AppConfig.Payments.defaultCurrencyCode,
+            payment_method: booking.paymentGateway,
+            transaction_id: booking.paymentId,
             refund_id: nil,
             host_payout_status: nil,
             payout_date: nil
@@ -361,43 +377,61 @@ class SupabaseService: ObservableObject {
             print("[Bookings] Attempting to insert booking: \(bookingData)")
         }
 
-        do {
-            _ = try await client
-                .from("bookings")
-                .insert(bookingData)
-                .execute()
-            if AppConfig.Features.enableDetailedLogging {
-                print("[Bookings] SDK insert succeeded for id=\(booking.id)")
+        // Attempt up to 3 retries for transient network errors, then REST fallback.
+        let transientCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .notConnectedToInternet]
+        var lastError: Error? = nil
+        for attempt in 1...3 {
+            do {
+                _ = try await client
+                    .from("bookings")
+                    .insert(bookingData)
+                    .execute()
+                if AppConfig.Features.enableDetailedLogging {
+                    print("[Bookings] SDK insert succeeded for id=\(booking.id) on attempt #\(attempt)")
+                }
+                lastError = nil
+                break
+            } catch {
+                lastError = error
+                if let urlError = error as? URLError, transientCodes.contains(urlError.code) {
+                    if AppConfig.Features.enableDetailedLogging {
+                        print("[Bookings] Transient error (\(urlError.code.rawValue)) on attempt #\(attempt); retrying…")
+                    }
+                    // Exponential backoff: 0.5s, 1.0s, 2.0s
+                    let delay = UInt64(500_000_000) << (attempt - 1)
+                    try? await Task.sleep(nanoseconds: delay)
+                    continue
+                } else {
+                    // Non-transient error; break to fallback
+                    break
+                }
             }
-        } catch {
+        }
+
+        if let error = lastError {
             if AppConfig.Features.enableDetailedLogging {
-                print("[Bookings] SDK insert failed with error: \(error)")
+                print("[Bookings] SDK insert failed after retries with error: \(error)")
                 print("[Bookings] Booking data causing error: \(bookingData)")
             }
-            // Fallback: if the SDK insert times out or faces transient network issues,
-            // attempt a direct REST insert with a slightly longer timeout.
-            if let urlError = error as? URLError, urlError.code == .timedOut {
-                do {
-                    _ = try await SupabaseREST.postRow(to: "bookings", object: bookingData, timeout: 15.0)
-                    if AppConfig.Features.enableDetailedLogging {
-                        print("[Bookings] REST fallback insert succeeded for id=\(booking.id)")
-                    }
-                } catch let netErr as NetworkError {
-                    if AppConfig.Features.enableDetailedLogging {
-                        print("[Bookings] REST fallback failed with error: \(netErr)")
-                        print("[Bookings] Booking data causing REST fallback error: \(bookingData)")
-                    }
-                    // Treat duplicate key conflict as success for idempotency (row likely created already)
-                    if case .serverError(let code) = netErr, code == 409 {
-                        if AppConfig.Features.enableDetailedLogging {
-                            print("[Bookings] REST fallback returned 409 conflict; treating as success for id=\(booking.id)")
-                        }
-                    } else {
-                        throw netErr
-                    }
+            // REST fallback with longer timeout
+            do {
+                _ = try await SupabaseREST.postRow(to: "bookings", object: bookingData, timeout: 20.0)
+                if AppConfig.Features.enableDetailedLogging {
+                    print("[Bookings] REST fallback insert succeeded for id=\(booking.id)")
                 }
-            } else {
-                throw error
+            } catch let netErr as NetworkError {
+                if AppConfig.Features.enableDetailedLogging {
+                    print("[Bookings] REST fallback failed with error: \(netErr)")
+                    print("[Bookings] Booking data causing REST fallback error: \(bookingData)")
+                }
+                // Treat duplicate key conflict as success for idempotency (row likely created already)
+                if case .serverError(let code) = netErr, code == 409 {
+                    if AppConfig.Features.enableDetailedLogging {
+                        print("[Bookings] REST fallback returned 409 conflict; treating as success for id=\(booking.id)")
+                    }
+                } else {
+                    throw netErr
+                }
             }
         }
 
@@ -462,7 +496,10 @@ class SupabaseService: ObservableObject {
                 status: BookingStatus.fromDb(row.status),
                 price: row.price,
                 userNotes: row.user_notes,
-                paymentStatus: row.payment_status
+                paymentStatus: row.payment_status,
+                paymentId: nil,
+                paymentGateway: nil,
+                paymentMeta: nil
             )
         }
     }
@@ -761,10 +798,10 @@ struct BookingData: Identifiable, Sendable {
     let userNotes: String?
     let paymentStatus: String
 
-    // Removed paymentId, paymentGateway, paymentMeta as they do not exist in DB schema anymore.
-    let paymentId: String? = nil
-    let paymentGateway: String? = nil
-    let paymentMeta: String? = nil
+    // Client-side payment metadata (not persisted to DB, shown in UI only)
+    let paymentId: String?
+    let paymentGateway: String?
+    let paymentMeta: String?
 }
 
 struct LocationHistoryData: Sendable {

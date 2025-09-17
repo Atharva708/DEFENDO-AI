@@ -178,9 +178,11 @@ struct NewBookingFlowView: View, Identifiable {
                 Text("Notes: \(userNotes)")
             }
             Text("Payment Method: \(paymentMethod)")
-            if let price = service.price_per_hour ?? service.price, let currency = service.currency {
-                let total = Double(durationHours) * price
-                Text("Total: \(currency)\(String(format: "%.2f", total))")
+            if let price = service.price_per_hour ?? service.price {
+                let base = Double(durationHours) * price
+                let gstAmount = base * (AppConfig.Payments.gstPercent / 100.0)
+                let total = base + gstAmount
+                Text("Total (incl. GST): \(currencyString(total, code: service.currency ?? AppConfig.Payments.defaultCurrencyCode))")
             }
         }
         .padding()
@@ -209,7 +211,7 @@ struct NewBookingFlowView: View, Identifiable {
             id: bookingIDValue,
             userId: user.id,
             providerId: providerID,
-            serviceType: ServiceType(rawValue: service.service_type ?? "bodyguard") ?? .bodyguard,
+            serviceType: ServiceType.fromDb(service.service_type ?? "bodyguard"),
             date: bookingDate,
             startTime: startTime,
             endTime: endTimeValue,
@@ -220,7 +222,10 @@ struct NewBookingFlowView: View, Identifiable {
             status: .pending,
             price: totalPrice,
             userNotes: userNotes.isEmpty ? nil : userNotes,
-            paymentStatus: "pending"
+            paymentStatus: "pending",
+            paymentId: nil,
+            paymentGateway: nil,
+            paymentMeta: nil
         )
 
         Task {
@@ -436,7 +441,7 @@ struct ServiceCardView: View {
                 }
                 HStack(spacing: 10) {
                     if let price = service.price_per_hour ?? service.price {
-                        Text(currencyString(price, code: service.currency) + "/hr")
+                        Text(currencyString(price, code: service.currency ?? AppConfig.Payments.defaultCurrencyCode) + "/hr")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.accentColor)
                     }
@@ -469,7 +474,7 @@ struct ServiceCardView: View {
 private func currencyString(_ amount: Double, code: String?) -> String {
     let f = NumberFormatter()
     f.numberStyle = .currency
-    if let code = code { f.currencyCode = code }
+    f.currencyCode = code ?? AppConfig.Payments.defaultCurrencyCode
     return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
 }
 

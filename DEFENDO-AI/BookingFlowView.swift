@@ -30,6 +30,8 @@ struct BookingFlowView: View {
     
     // Booking & UI State
     @State private var showBookingConfirmation = false
+    @State private var lastPaymentId: String? = nil
+    @State private var lastBookingId: String? = nil
     
     // Show previous bookings sheet
     @State private var showPreviousBookings = false
@@ -40,7 +42,7 @@ struct BookingFlowView: View {
         self.service = service
         // Initialize selectedService from service if available, else default to bodyguard
         if let svc = service {
-            _selectedService = State(initialValue: ServiceType(rawValue: svc.service_type ?? "") ?? .bodyguard)
+            _selectedService = State(initialValue: ServiceType.fromDb(svc.service_type ?? "bodyguard"))
         } else {
             _selectedService = State(initialValue: .bodyguard)
         }
@@ -127,7 +129,7 @@ struct BookingFlowView: View {
                                         .fontWeight(.semibold)
                                     
                                     if let pricePerHour = service?.price_per_hour {
-                                        Text(String(format: "$%.2f / hr", pricePerHour))
+                                Text(formatCurrency(pricePerHour, code: service?.currency ?? AppConfig.Payments.defaultCurrencyCode) + " / hr")
                                             .foregroundColor(.secondary)
                                     }
                                 }
@@ -233,7 +235,7 @@ struct BookingFlowView: View {
                                 withAnimation { currentStep += 1 }
                                 triggerHapticImpact()
                             } else {
-                                // Confirm and save booking
+                        // Confirm and handle payment before saving booking
                                 saveBooking()
                             }
                         }) {
@@ -285,6 +287,8 @@ struct BookingFlowView: View {
                     duration: selectedDuration,
                     location: location,
                     price: calculateTotalPrice(),
+                    transactionId: lastPaymentId,
+                    bookingId: lastBookingId,
                     hostService: service
                 )
             }
@@ -329,9 +333,7 @@ struct BookingFlowView: View {
     // MARK: - Booking Save
     
     private func saveBooking() {
-        Task {
-            await saveBookingAsync()
-        }
+        Task { await saveBookingAsync() }
     }
     
     @MainActor
@@ -368,10 +370,6 @@ struct BookingFlowView: View {
             priceToUse = calculateTotalPrice() / Double(selectedDuration)
         }
         
-        // Note: serviceType is omitted here when saving to Supabase to avoid Supabase error about unknown field.
-        // The BookingData struct requires it, but it will not be sent to Supabase.
-        // To achieve this, we create a dictionary without the serviceType key for saving.
-        
         let bookingData = BookingData(
             id: UUID().uuidString,
             userId: userId,
@@ -385,31 +383,106 @@ struct BookingFlowView: View {
             latitude: nil as Double?,
             longitude: nil as Double?,
             status: .pending,
-            price: priceToUse * Double(selectedDuration),
+            price: applyGst(priceToUse * Double(selectedDuration)),
             userNotes: specialInstructions,
-            paymentStatus: "paid"
+            paymentStatus: "pending",
+            paymentId: nil,
+            paymentGateway: nil,
+            paymentMeta: nil
         )
         
-        print("BookingData for Supabase:", bookingData, "serviceType.dbValue:", bookingData.serviceType.dbValue)
-        
-        let saved = await saveBookingToSupabase(bookingData: bookingData)
-        if saved {
-            NotificationHelper.scheduleBookingConfirmedNotification(for: bookingData)
-            showBookingConfirmation = true
-            triggerHapticSuccess()
-        } else {
-            // Could show an error alert here
+        // 1) Process payment first
+        let currencyCode = service?.currency ?? AppConfig.Payments.defaultCurrencyCode
+        let totalAmount = bookingData.price
+        let paymentRequest = RazorpayService.PaymentRequest(
+            amount: totalAmount,
+            currencyCode: currencyCode,
+            description: "Booking payment for \(selectedService.dbValue)",
+            orderId: nil,
+            metadata: ["provider_id": provider_id],
+            customerEmail: authService.currentUser?.email,
+            customerPhone: authService.currentUser?.phone
+        )
+
+        do {
+            let result = try await RazorpayService.shared.pay(paymentRequest)
+            print("Razorpay payment success:", result)
+
+            // 2) Only after success, save booking with paid status
+            let paidBooking = BookingData(
+                id: bookingData.id,
+                userId: bookingData.userId,
+                providerId: bookingData.providerId,
+                serviceType: bookingData.serviceType,
+                date: bookingData.date,
+                startTime: bookingData.startTime,
+                endTime: bookingData.endTime,
+                durationHours: bookingData.durationHours,
+                location: bookingData.location,
+                latitude: bookingData.latitude,
+                longitude: bookingData.longitude,
+                status: .confirmed,
+                price: bookingData.price,
+                userNotes: bookingData.userNotes,
+                paymentStatus: "paid",
+                paymentId: result.paymentId,
+                paymentGateway: "Razorpay",
+                paymentMeta: result.status
+            )
+
+            let saved = await saveBookingToSupabase(bookingData: paidBooking)
+            if saved {
+                NotificationHelper.schedule(title: "Booking Confirmed", body: "Your booking for \(serviceDisplayName(paidBooking.serviceType)) is confirmed.")
+                // Populate IDs
+                lastPaymentId = result.paymentId
+                lastBookingId = paidBooking.id
+                triggerHapticSuccess()
+                // Redirect to bookings page
+                await MainActor.run { appState.currentScreen = .booking }
+                // Fire background status notifications
+                Task { await simulateLiveStatusNotifications(for: paidBooking) }
+            } else {
+                triggerHapticError()
+            }
+        } catch {
+            print("Payment failed: \(error.localizedDescription)")
             triggerHapticError()
+        }
+    }
+
+    // User-friendly service display name
+    private func serviceDisplayName(_ type: ServiceType) -> String {
+        type.dbValue.replacingOccurrences(of: "_", with: " ")
+    }
+
+    // Lightweight simulated tracking like Swiggy. Replace with realtime updates when backend is ready.
+    private func simulateLiveStatusNotifications(for booking: BookingData) async {
+        do {
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            NotificationHelper.schedule(title: "Assigning Provider", body: "We're assigning the best professional for you…")
+            try await Task.sleep(nanoseconds: 6_000_000_000)
+            NotificationHelper.schedule(title: "Provider En Route", body: "Your provider is on the way to \(booking.location).")
+            try await Task.sleep(nanoseconds: 10_000_000_000)
+            NotificationHelper.schedule(title: "Service Started", body: "Your booked service has started.")
+        } catch {
+            // Ignore cancellation
         }
     }
     
     private func calculateTotalPrice() -> Double {
         if let hostService = service, let pricePerHour = hostService.price_per_hour {
-            return pricePerHour * Double(selectedDuration)
+            return applyGst(pricePerHour * Double(selectedDuration))
         } else {
             let hourlyRate = selectedService == .bodyguard ? 25.0 : 35.0
-            return hourlyRate * Double(selectedDuration)
+            return applyGst(hourlyRate * Double(selectedDuration))
         }
+    }
+
+    private func applyGst(_ base: Double) -> Double {
+        let gst = AppConfig.Payments.gstPercent / 100.0
+        let value = base * (1.0 + gst)
+        let factor = pow(10.0, 2.0)
+        return (value * factor).rounded() / factor
     }
     
     // Modified to accept BookingData for Supabase saving
@@ -439,7 +512,7 @@ struct BookingFlowView: View {
     private func formatCurrency(_ amount: Double, code: String?) -> String {
         let f = NumberFormatter()
         f.numberStyle = .currency
-        if let code = code { f.currencyCode = code }
+        f.currencyCode = code ?? AppConfig.Payments.defaultCurrencyCode
         return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
     }
 }
@@ -542,6 +615,8 @@ struct BookingConfirmationView: View {
     let duration: Int
     let location: String
     let price: Double
+    var transactionId: String? = nil
+    var bookingId: String? = nil
     
     let hostService: HostService? // Optional host service for extended info
     
@@ -583,7 +658,13 @@ struct BookingConfirmationView: View {
                 confirmationRow(title: "Time:", value: time.formatted(date: .omitted, time: .shortened))
                 confirmationRow(title: "Duration:", value: "\(duration) hour\(duration == 1 ? "" : "s")")
                 confirmationRow(title: "Location:", value: location)
-                confirmationRow(title: "Total Paid:", value: String(format: "$%.2f", price))
+                confirmationRow(title: "Total Paid:", value: String(format: "₹%.2f", price))
+                if let tid = transactionId {
+                    confirmationRow(title: "Transaction ID:", value: tid)
+                }
+                if let bid = bookingId {
+                    confirmationRow(title: "Booking ID:", value: bid)
+                }
             }
             .padding()
             .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
@@ -653,6 +734,15 @@ struct NotificationHelper {
     }
     static func scheduleBookingConfirmedNotification(for booking: Any) {
         // Placeholder: Schedule booking notification
+    }
+    static func schedule(title: String, body: String) {
+        // Minimal local notification helper
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
     }
 }
 

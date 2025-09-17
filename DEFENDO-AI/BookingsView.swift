@@ -16,6 +16,7 @@ struct BookingsView: View {
     @State private var loadError: String? = nil
     @State private var selectedFilter = "All"
     @State private var searchText = ""
+    @State private var selectedBooking: BookingData? = nil
     
     let filters = ["All", "Upcoming", "Completed", "Cancelled"]
     
@@ -55,18 +56,27 @@ struct BookingsView: View {
                     } else {
                         LazyVStack(spacing: 15) {
                             ForEach(getFilteredBookings(), id: \.id) { booking in
-                                BookingCardDynamic(booking: booking)
+                                BookingCardDynamic(booking: booking) {
+                                    selectedBooking = booking
+                                }
                             }
                         }
                         .padding()
+                        .transition(.opacity)
+                        .animation(.easeInOut, value: bookings.count)
                     }
                 }
+                .refreshable { await loadBookings() }
             }
             .navigationTitle("My Bookings")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(Color.black, for: .navigationBar)
             .searchable(text: $searchText, prompt: "Search bookings...")
             .onAppear { Task { await loadBookings() } }
+            .sheet(item: $selectedBooking) { booking in
+                BookingDetailView(booking: booking)
+                    .environmentObject(appState)
+            }
         }
     }
     
@@ -104,29 +114,33 @@ struct BookingsView: View {
 
 struct BookingCardDynamic: View {
     let booking: BookingData
+    let onViewDetails: () -> Void
     @EnvironmentObject var appState: AppState
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Image(systemName: "eye.fill")
+                Image(systemName: iconForService(booking.serviceType))
                     .foregroundColor(.blue)
                     .font(.title2)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(booking.providerId)
+                    Text(bookingTitle)
                         .font(.headline)
                         .fontWeight(.medium)
                     
-                    Text(booking.serviceType.rawValue)
+                    Text(serviceDisplayName(booking.serviceType))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                StatusBadge(status: booking.status)
+                VStack(alignment: .trailing, spacing: 6) {
+                    StatusBadge(status: booking.status)
+                    PaymentBadge(status: booking.paymentStatus)
+                }
             }
             
             // Details
@@ -134,7 +148,8 @@ struct BookingCardDynamic: View {
                 DetailRow(icon: "calendar", text: formatDate(booking.date))
                 DetailRow(icon: "clock", text: "\(booking.durationHours) hours")
                 DetailRow(icon: "location", text: booking.location)
-                DetailRow(icon: "dollarsign.circle", text: currencyString(booking.price, code: nil))
+                DetailRow(icon: "dollarsign.circle", text: currencyString(booking.price, code: AppConfig.Payments.defaultCurrencyCode))
+                DetailRow(icon: "person", text: "Provider: \(booking.providerId)")
             }
             
             // Actions
@@ -146,9 +161,7 @@ struct BookingCardDynamic: View {
                     .buttonStyle(SecondaryButtonStyle())
                 }
                 
-                Button("View Details") {
-                    // Show booking details
-                }
+                Button("View Details") { onViewDetails() }
                 .buttonStyle(PrimaryButtonStyle())
             }
         }
@@ -157,6 +170,26 @@ struct BookingCardDynamic: View {
         .cornerRadius(12)
     }
     
+    private var bookingTitle: String {
+        let title = serviceDisplayName(booking.serviceType)
+        return title.capitalized
+    }
+
+    private func serviceDisplayName(_ type: ServiceType) -> String {
+        let raw = type.dbValue.replacingOccurrences(of: "_", with: " ")
+        return raw
+    }
+
+    private func iconForService(_ type: ServiceType) -> String {
+        switch type {
+        case .bodyguard: return "shield.lefthalf.fill"
+        case .dronePatrol: return "airplane"
+        case .surveillance: return "camera.viewfinder"
+        case .escort: return "person.2.fill"
+        case .emergency: return "cross.case.fill"
+        }
+    }
+
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -196,6 +229,32 @@ struct StatusBadge: View {
         case .inProgress: return .purple
         case .completed: return .green
         case .cancelled: return .red
+        }
+    }
+}
+
+struct PaymentBadge: View {
+    let status: String
+    
+    var body: some View {
+        Text(status.capitalized)
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.16))
+            .foregroundColor(color)
+            .cornerRadius(6)
+            .accessibilityLabel("Payment status \(status)")
+    }
+    
+    private var color: Color {
+        switch status.lowercased() {
+        case "paid": return .green
+        case "pending": return .orange
+        case "refunded": return .blue
+        case "failed", "cancelled": return .red
+        default: return .gray
         }
     }
 }
