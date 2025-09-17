@@ -172,8 +172,9 @@ extension ServiceType {
         }
     }
     static func fromDb(_ value: String) -> ServiceType {
+        // Normalize all guard-like strings to .bodyguard
         switch value {
-        case "bodyguard": return .bodyguard
+        case "bodyguard", "guard", "security_guard": return .bodyguard
         case "dronePatrol", "drone_patrol": return .dronePatrol
         case "surveillance": return .surveillance
         case "escort": return .escort

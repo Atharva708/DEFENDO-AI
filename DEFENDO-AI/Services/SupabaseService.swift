@@ -290,7 +290,7 @@ class SupabaseService: ObservableObject {
         serviceTypeDB = serviceTypeDB.replacingOccurrences(of: "-", with: "_")
 
         // Allowed service types per DB schema - Example set (adjust if needed)
-        let allowedServiceTypes = ["security_guard", "guard", "patrol", "cleaning", "delivery"]
+        let allowedServiceTypes = ["bodyguard", "guard", "patrol", "cleaning", "delivery"]
         guard allowedServiceTypes.contains(serviceTypeDB) else {
             throw NSError(domain: "BookingError", code: 400, userInfo: [NSLocalizedDescriptionKey: "Booking service_type '\(serviceTypeDB)' is not allowed"])
         }
