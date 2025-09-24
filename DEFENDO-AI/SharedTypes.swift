@@ -26,6 +26,10 @@ class AppState: ObservableObject {
     @Published var currentScreen: Screen = .dashboard
     @Published var userRole: UserRole = .user
     @Published var selectedProviderForBooking: MarketplaceProvider? = nil
+    // Onboarding gating flags
+    @Published var hasAcceptedTerms: Bool = false
+    @Published var hasAcceptedPrivacy: Bool = false
+    @Published var hasShownOnboardingTips: Bool = false
     
     init() {
         // Initialize with default values

@@ -12,6 +12,9 @@ import Supabase
 struct RootView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var locationService: LocationService
+    @State private var showTerms = false
+    @State private var showPrivacy = false
     
     var body: some View {
         Group {
@@ -19,11 +22,64 @@ struct RootView: View {
                 LoadingView()
             } else if authService.isAuthenticated {
                 DashboardView()
+                    .onAppear { presentGatedModalsIfNeeded() }
             } else {
                 AuthenticationContainerView()
+                    .onAppear { presentGatedModalsIfNeeded() }
             }
         }
         .animation(.easeInOut, value: authService.isAuthenticated)
+        .fullScreenCover(isPresented: $showTerms) {
+            PolicyScrollModalView(
+                title: "Terms & Conditions",
+                content: termsContent,
+                confirmTitle: "I Agree"
+            ) {
+                appState.hasAcceptedTerms = true
+                showTerms = false
+                // After terms, show privacy if needed
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    presentPrivacyIfNeeded()
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showPrivacy) {
+            PolicyScrollModalView(
+                title: "Privacy Policy",
+                content: privacyContent,
+                confirmTitle: "I Agree"
+            ) {
+                appState.hasAcceptedPrivacy = true
+                showPrivacy = false
+                // After acceptance, request location permission
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    locationService.requestLocationPermission()
+                }
+            }
+        }
+    }
+
+    private func presentGatedModalsIfNeeded() {
+        if !appState.hasAcceptedTerms {
+            showTerms = true
+        } else if !appState.hasAcceptedPrivacy {
+            showPrivacy = true
+        }
+    }
+
+    private func presentPrivacyIfNeeded() {
+        if !appState.hasAcceptedPrivacy {
+            showPrivacy = true
+        }
+    }
+
+    // Placeholder long-form content; in production, load from bundled file or remote
+    private var termsContent: String {
+        Array(repeating: "These are the terms and conditions for using DEFENDO-AI. ", count: 200).joined()
+    }
+
+    private var privacyContent: String {
+        Array(repeating: "This Privacy Policy describes how DEFENDO-AI handles your data. ", count: 200).joined()
     }
 }
 
@@ -195,6 +251,24 @@ struct DashboardView: View {
                 .environmentObject(locationService)
                 .environmentObject(emergencyContactService)
         )
+        .modifier(CoachMarksOverlay(show: Binding(get: { !appState.hasShownOnboardingTips }, set: { newValue in
+            // When overlay requests hide (newValue == false), mark tips as shown
+            if newValue == false { appState.hasShownOnboardingTips = true }
+        })) { finish in
+            VStack(alignment: .leading, spacing: 16) {
+                CoachMark(text: "Home shows your safety score, quick actions, and latest info.")
+                CoachMark(text: "Map helps you explore professionals and live safety zones.")
+                CoachMark(text: "Explore lets you browse services and providers.")
+                CoachMark(text: "Bookings keeps your upcoming and past bookings.")
+                CoachMark(text: "Profile manages your account and settings.")
+                Button("Got it") {
+                    appState.hasShownOnboardingTips = true
+                    finish()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+            .padding()
+        })
     }
 }
 
@@ -625,6 +699,135 @@ struct TextButtonStyle: ButtonStyle {
         configuration.label
             .foregroundColor(.secondary)
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+    }
+}
+
+// MARK: - Policy Modal (scroll to bottom to enable)
+struct PolicyScrollModalView: View {
+    let title: String
+    let content: String
+    let confirmTitle: String
+    let onConfirm: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var scrolledToBottom = false
+    @State private var contentHeight: CGFloat = .zero
+    @State private var scrollOffset: CGFloat = .zero
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        Text(content)
+                            .font(.body)
+                            .foregroundColor(.primary)
+                            .padding()
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear
+                                        .preference(key: ContentHeightKey.self, value: geo.size.height)
+                                }
+                            )
+                        // Anchor to detect end
+                        Color.clear
+                            .frame(height: 1)
+                            .id("BOTTOM")
+                    }
+                    .background(TrackScrollOffset(offset: $scrollOffset))
+                    .onChange(of: scrollOffset) { _ in
+                        // Heuristic: when user scrolls near end (>= 95%)
+                        if contentHeight > 0, scrollOffset >= contentHeight * 0.95 {
+                            scrolledToBottom = true
+                        }
+                    }
+                    .onPreferenceChange(ContentHeightKey.self) { value in
+                        contentHeight = max(contentHeight, value)
+                    }
+                }
+
+                VStack(spacing: 12) {
+                    Text(scrolledToBottom ? "You can proceed" : "Please scroll to the bottom to continue")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    Button(confirmTitle) {
+                        onConfirm()
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(!scrolledToBottom)
+                }
+                .padding()
+                .background(Color(UIColor.systemBackground))
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TrackScrollOffset: View {
+    @Binding var offset: CGFloat
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .preference(key: ScrollOffsetKey.self, value: proxy.frame(in: .named("scroll")).maxY)
+        }
+        .onPreferenceChange(ScrollOffsetKey.self) { value in
+            offset = max(offset, value)
+        }
+    }
+}
+
+private struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+// MARK: - Coach Marks Overlay
+struct CoachMarksOverlay<OverlayContent: View>: ViewModifier {
+    @Binding var show: Bool
+    let content: (_ finish: @escaping () -> Void) -> OverlayContent
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                Group {
+                    if show {
+                        ZStack {
+                            Color.black.opacity(0.55).ignoresSafeArea()
+                            VStack(alignment: .leading, spacing: 12) {
+                                self.content { withAnimation { show = false } }
+                            }
+                            .padding()
+                            .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+                            .padding()
+                        }
+                        .transition(.opacity)
+                    }
+                }
+            )
+    }
+}
+
+struct CoachMark: View {
+    let text: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.right.circle.fill").foregroundColor(.blue)
+            Text(text).foregroundColor(.primary)
+        }
     }
 }
 
