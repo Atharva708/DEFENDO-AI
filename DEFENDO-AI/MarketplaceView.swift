@@ -41,17 +41,6 @@ public struct HostService: Identifiable, Codable {
 
 // Using HostService struct defined in HostService.swift (should be in same target)
 
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding()
-            .background(Color.accentColor)
-            .foregroundColor(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
-    }
-}
-
 struct NewBookingFlowView: View, Identifiable {
     let id = UUID()
     let service: HostService
@@ -258,24 +247,19 @@ struct MarketplaceView: View {
         NavigationView {
             Group {
                 if isLoading {
-                    ProgressView("Loading services...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = fetchError {
-                    VStack(spacing: 20) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundColor(.red)
-                        Text("Failed to load services")
-                            .font(.title3)
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Button("Retry") {
-                            fetchServices()
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ForEach(0..<6, id: \.self) { _ in ServiceSkeletonCard() }
                         }
-                        .buttonStyle(PrimaryButtonStyle())
+                        .padding()
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = fetchError {
+                    ErrorStateView(
+                        title: "Failed to load services",
+                        message: error,
+                        retryTitle: "Retry",
+                        onRetry: { fetchServices() }
+                    )
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {

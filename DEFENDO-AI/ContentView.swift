@@ -29,6 +29,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut, value: authService.isAuthenticated)
+        .applyDefaultToolbar()
         .fullScreenCover(isPresented: $showTerms) {
             PolicyScrollModalView(
                 title: "Terms & Conditions",
@@ -251,24 +252,28 @@ struct DashboardView: View {
                 .environmentObject(locationService)
                 .environmentObject(emergencyContactService)
         )
-        .modifier(CoachMarksOverlay(show: Binding(get: { !appState.hasShownOnboardingTips }, set: { newValue in
-            // When overlay requests hide (newValue == false), mark tips as shown
-            if newValue == false { appState.hasShownOnboardingTips = true }
-        })) { finish in
-            VStack(alignment: .leading, spacing: 16) {
-                CoachMark(text: "Home shows your safety score, quick actions, and latest info.")
-                CoachMark(text: "Map helps you explore professionals and live safety zones.")
-                CoachMark(text: "Explore lets you browse services and providers.")
-                CoachMark(text: "Bookings keeps your upcoming and past bookings.")
-                CoachMark(text: "Profile manages your account and settings.")
-                Button("Got it") {
-                    appState.hasShownOnboardingTips = true
-                    finish()
-                }
-                .buttonStyle(PrimaryButtonStyle())
+        .modifier(
+            CoachMarksOverlay<AnyView>(show: Binding(get: { !appState.hasShownOnboardingTips }, set: { newValue in
+                // When overlay requests hide (newValue == false), mark tips as shown
+                if newValue == false { appState.hasShownOnboardingTips = true }
+            })) { finish in
+                AnyView(
+                    VStack(alignment: .leading, spacing: 16) {
+                        CoachMark(text: "Home shows your safety score, quick actions, and latest info.")
+                        CoachMark(text: "Map helps you explore professionals and live safety zones.")
+                        CoachMark(text: "Explore lets you browse services and providers.")
+                        CoachMark(text: "Bookings keeps your upcoming and past bookings.")
+                        CoachMark(text: "Profile manages your account and settings.")
+                        Button("Got it") {
+                            appState.hasShownOnboardingTips = true
+                            finish()
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
+                    .padding()
+                )
             }
-            .padding()
-        })
+        )
     }
 }
 
@@ -679,28 +684,7 @@ struct FullMapView: View {
 
 
 
-struct SecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color.clear)
-            .foregroundColor(.blue)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.blue, lineWidth: 1)
-            )
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-    }
-}
-
-struct TextButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundColor(.secondary)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-    }
-}
+// Moved to Components.swift (SecondaryButtonStyle, TextButtonStyle)
 
 // MARK: - Policy Modal (scroll to bottom to enable)
 struct PolicyScrollModalView: View {
@@ -815,6 +799,8 @@ struct CoachMarksOverlay<OverlayContent: View>: ViewModifier {
                             .padding()
                         }
                         .transition(.opacity)
+                    } else {
+                        EmptyView()
                     }
                 }
             )

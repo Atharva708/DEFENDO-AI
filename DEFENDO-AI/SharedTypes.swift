@@ -27,12 +27,21 @@ class AppState: ObservableObject {
     @Published var userRole: UserRole = .user
     @Published var selectedProviderForBooking: MarketplaceProvider? = nil
     // Onboarding gating flags
-    @Published var hasAcceptedTerms: Bool = false
-    @Published var hasAcceptedPrivacy: Bool = false
-    @Published var hasShownOnboardingTips: Bool = false
+    @Published var hasAcceptedTerms: Bool {
+        didSet { UserDefaults.standard.set(hasAcceptedTerms, forKey: "hasAcceptedTerms") }
+    }
+    @Published var hasAcceptedPrivacy: Bool {
+        didSet { UserDefaults.standard.set(hasAcceptedPrivacy, forKey: "hasAcceptedPrivacy") }
+    }
+    @Published var hasShownOnboardingTips: Bool {
+        didSet { UserDefaults.standard.set(hasShownOnboardingTips, forKey: "hasShownOnboardingTips") }
+    }
     
     init() {
-        // Initialize with default values
+        // Initialize with persisted values
+        self.hasAcceptedTerms = UserDefaults.standard.bool(forKey: "hasAcceptedTerms")
+        self.hasAcceptedPrivacy = UserDefaults.standard.bool(forKey: "hasAcceptedPrivacy")
+        self.hasShownOnboardingTips = UserDefaults.standard.bool(forKey: "hasShownOnboardingTips")
     }
 }
 

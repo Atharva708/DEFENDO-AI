@@ -45,14 +45,17 @@ struct BookingsView: View {
                 // Bookings List
                 ScrollView {
                     if isLoading {
-                        ProgressView().padding()
+                        VStack(spacing: 12) {
+                            ForEach(0..<3, id: \.self) { _ in BookingSkeletonCard() }
+                        }
+                        .padding()
                     } else if let error = loadError {
-                        VStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle").foregroundColor(.red)
-                            Text(error).font(.footnote).foregroundColor(.secondary)
-                            Button("Retry") { Task { await loadBookings() } }
-                                .buttonStyle(PrimaryButtonStyle())
-                        }.padding()
+                        ErrorStateView(
+                            title: "Failed to load bookings",
+                            message: error,
+                            retryTitle: "Retry",
+                            onRetry: { Task { await loadBookings() } }
+                        )
                     } else {
                         LazyVStack(spacing: 15) {
                             ForEach(getFilteredBookings(), id: \.id) { booking in

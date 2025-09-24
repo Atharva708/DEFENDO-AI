@@ -173,29 +173,32 @@ struct BookingFlowView: View {
                                     .padding(.horizontal)
                             }
                         case 1:
-                            DateTimeSelectionStep(
-                                selectedDate: $selectedDate,
-                                selectedTime: $selectedTime,
-                                showValidationError: !canProceedToNextStep(),
-                                onDateOrTimeChanged: { /* trigger UI update if needed */ },
-                                onBack: {
-                                    withAnimation { currentStep -= 1 }
-                                    triggerHapticImpact()
-                                },
-                                onNext: {
-                                    withAnimation { currentStep += 1 }
-                                    triggerHapticImpact()
-                                },
-                                canProceed: canProceedToNextStep()
-                            )
-                            .padding(.horizontal)
-                            .padding(.top, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 24)
-                                    .fill(Color(UIColor.secondarySystemBackground))
-                                    .shadow(radius: 7, y: 2)
-                            )
-                            .padding(.horizontal)
+                            ScrollView {
+                                DateTimeSelectionStep(
+                                    selectedDate: $selectedDate,
+                                    selectedTime: $selectedTime,
+                                    showValidationError: !canProceedToNextStep(),
+                                    onDateOrTimeChanged: { /* trigger UI update if needed */ },
+                                    onBack: {
+                                        withAnimation { currentStep -= 1 }
+                                        triggerHapticImpact()
+                                    },
+                                    onNext: {
+                                        withAnimation { currentStep += 1 }
+                                        triggerHapticImpact()
+                                    },
+                                    canProceed: canProceedToNextStep()
+                                )
+                                .padding(.horizontal)
+                                .padding(.top, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 24)
+                                        .fill(Color(UIColor.secondarySystemBackground))
+                                        .shadow(radius: 7, y: 2)
+                                )
+                                .padding(.horizontal)
+                                .padding(.bottom, 12)
+                            }
                         case 2:
                             DurationLocationStep(selectedDuration: $selectedDuration,
                                                  location: $location,

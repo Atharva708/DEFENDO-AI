@@ -16,6 +16,12 @@ struct LiveLocationView: View {
     @State private var showingSafetyZones = false
     @State private var showingEmergencyContacts = false
     @State private var showingLocationSettings = false
+    
+    enum ActiveSheet: Identifiable {
+        case history, safetyZones, emergencyContacts, settings
+        var id: Int { hashValue }
+    }
+    @State private var activeSheet: ActiveSheet?
     @State private var isSharingLocation = false
     
     var body: some View {
@@ -35,7 +41,7 @@ struct LiveLocationView: View {
                     LocationControlsCard()
                     
                     // Quick Actions
-                    QuickActionsCard()
+                    QuickActionsCard(activeSheet: $activeSheet)
                     
                     // Location History Preview
                     LocationHistoryPreviewCard()
@@ -45,23 +51,23 @@ struct LiveLocationView: View {
             .navigationTitle("Live Location")
             .navigationBarTitleDisplayMode(.large)
             .navigationBarItems(trailing: Button("Settings") {
-                showingLocationSettings = true
+                activeSheet = .settings
             })
         }
-        .sheet(isPresented: $showingLocationHistory) {
-            LocationHistoryView()
-                .environmentObject(locationService)
-        }
-        .sheet(isPresented: $showingSafetyZones) {
-            SafetyZonesView()
-                .environmentObject(mapKitService)
-        }
-        .sheet(isPresented: $showingEmergencyContacts) {
-            EmergencyContactsView()
-        }
-        .sheet(isPresented: $showingLocationSettings) {
-            LocationSettingsView()
-                .environmentObject(locationService)
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .history:
+                LocationHistoryView()
+                    .environmentObject(locationService)
+            case .safetyZones:
+                SafetyZonesView()
+                    .environmentObject(mapKitService)
+            case .emergencyContacts:
+                EmergencyContactsView()
+            case .settings:
+                LocationSettingsView()
+                    .environmentObject(locationService)
+            }
         }
         .onAppear {
             locationService.startLocationTracking()
@@ -416,9 +422,7 @@ struct LocationControlsCard: View {
 // MARK: - Quick Actions Card
 struct QuickActionsCard: View {
     @EnvironmentObject var locationService: LocationService
-    @State private var showingLocationHistory = false
-    @State private var showingSafetyZones = false
-    @State private var showingEmergencyContacts = false
+    @Binding var activeSheet: LiveLocationView.ActiveSheet?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
@@ -432,7 +436,7 @@ struct QuickActionsCard: View {
                     title: "Location History",
                     color: .blue
                 ) {
-                    showingLocationHistory = true
+                    activeSheet = .history
                 }
                 
                 LiveLocationQuickActionButton(
@@ -440,7 +444,7 @@ struct QuickActionsCard: View {
                     title: "Safety Zones",
                     color: .green
                 ) {
-                    showingSafetyZones = true
+                    activeSheet = .safetyZones
                 }
                 
                 LiveLocationQuickActionButton(
@@ -448,7 +452,7 @@ struct QuickActionsCard: View {
                     title: "Emergency Contacts",
                     color: .red
                 ) {
-                    showingEmergencyContacts = true
+                    activeSheet = .emergencyContacts
                 }
                 
                 LiveLocationQuickActionButton(
