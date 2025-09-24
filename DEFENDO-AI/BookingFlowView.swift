@@ -35,6 +35,7 @@ struct BookingFlowView: View {
     
     // Show previous bookings sheet
     @State private var showPreviousBookings = false
+    @State private var showPaymentReview = false
     
     let steps = ["Select Service", "Date & Time", "Duration & Location", "Review & Confirm"]
     
@@ -53,6 +54,24 @@ struct BookingFlowView: View {
             ZStack {
                 Color(UIColor.systemGroupedBackground).edgesIgnoringSafeArea(.all)
                 VStack(spacing: 0) {
+                    // Standalone payment review navigation
+                    NavigationLink(isActive: $showPaymentReview) {
+                        PaymentReviewView(
+                            selectedService: selectedService,
+                            selectedDate: selectedDate,
+                            selectedTime: selectedTime,
+                            selectedDuration: selectedDuration,
+                            location: location,
+                            specialInstructions: specialInstructions,
+                            hostService: service
+                        ) { paymentId, paymentStatus in
+                            Task { await finalizeBookingAfterPayment(paymentId: paymentId, paymentStatus: paymentStatus) }
+                        }
+                        .environmentObject(authService)
+                        .environmentObject(appState)
+                    } label: { EmptyView() }
+                    .hidden()
+
                     // Show custom header if service is provided, else show progress bar and generic title
                     if let hostService = service {
                         // Custom header with image and name, price if available
@@ -235,8 +254,8 @@ struct BookingFlowView: View {
                                 withAnimation { currentStep += 1 }
                                 triggerHapticImpact()
                             } else {
-                        // Confirm and handle payment before saving booking
-                                saveBooking()
+                                // Navigate to standalone payment review page
+                                showPaymentReview = true
                             }
                         }) {
                             Text(currentStep == 3 ? "Confirm Booking" : "Next")
@@ -446,6 +465,58 @@ struct BookingFlowView: View {
             }
         } catch {
             print("Payment failed: \(error.localizedDescription)")
+            triggerHapticError()
+        }
+    }
+
+    // MARK: - Finalize booking after payment (used by PaymentReviewView)
+    @MainActor
+    private func finalizeBookingAfterPayment(paymentId: String, paymentStatus: String) async {
+        let calendar = Calendar.current
+        var startComponents = calendar.dateComponents([.year,.month,.day], from: selectedDate)
+        let timeComponents = calendar.dateComponents([.hour,.minute], from: selectedTime)
+        startComponents.hour = timeComponents.hour
+        startComponents.minute = timeComponents.minute
+        let startTime = calendar.date(from: startComponents) ?? selectedDate
+        let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
+
+        guard let userId = authService.currentUser?.id else { return }
+        guard let hostService = service else { return }
+        let providerId = hostService.provider_id ?? hostService.id
+
+        let pricePerHour = hostService.price_per_hour ?? (selectedService == .bodyguard ? 25.0 : 35.0)
+        let price = applyGst(pricePerHour * Double(selectedDuration))
+
+        let paidBooking = BookingData(
+            id: UUID().uuidString,
+            userId: userId,
+            providerId: providerId,
+            serviceType: selectedService,
+            date: selectedDate,
+            startTime: startTime,
+            endTime: endTime,
+            durationHours: selectedDuration,
+            location: location,
+            latitude: nil as Double?,
+            longitude: nil as Double?,
+            status: .confirmed,
+            price: price,
+            userNotes: specialInstructions,
+            paymentStatus: "paid",
+            paymentId: paymentId,
+            paymentGateway: "Razorpay",
+            paymentMeta: paymentStatus
+        )
+
+        let saved = await saveBookingToSupabase(bookingData: paidBooking)
+        if saved {
+            NotificationHelper.schedule(title: "Booking Confirmed", body: "Your booking for \(serviceDisplayName(paidBooking.serviceType)) is confirmed.")
+            lastPaymentId = paymentId
+            lastBookingId = paidBooking.id
+            triggerHapticSuccess()
+            await MainActor.run { appState.currentScreen = .booking }
+            Task { await simulateLiveStatusNotifications(for: paidBooking) }
+        } else {
             triggerHapticError()
         }
     }
@@ -743,6 +814,192 @@ struct NotificationHelper {
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+    }
+}
+
+// File-scope currency formatter for views in this file (accessible by PaymentReviewView)
+private func formatCurrency(_ amount: Double, code: String) -> String {
+    let f = NumberFormatter()
+    f.numberStyle = .currency
+    f.currencyCode = code
+    return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+}
+
+// MARK: - Standalone Payment Review Screen
+struct PaymentReviewView: View {
+    @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    let selectedService: ServiceType
+    let selectedDate: Date
+    let selectedTime: Date
+    let selectedDuration: Int
+    let location: String
+    let specialInstructions: String
+    let hostService: HostService?
+    let onPaySuccess: (_ paymentId: String, _ paymentStatus: String) -> Void
+
+    @State private var isPaying: Bool = false
+    @State private var showError: Bool = false
+    @State private var errorMessage: String = ""
+
+    private var hourlyRate: Double {
+        if let hostService = hostService, let pricePerHour = hostService.price_per_hour {
+            return pricePerHour
+        }
+        return selectedService == .bodyguard ? 25.0 : 35.0
+    }
+
+    private var subtotal: Double { hourlyRate * Double(selectedDuration) }
+    private var gstPercent: Double { AppConfig.Payments.gstPercent }
+    private var gstAmount: Double { subtotal * (gstPercent / 100.0) }
+    private var platformFee: Double { 0.0 }
+    private var total: Double { (subtotal + gstAmount + platformFee).rounded(toPlaces: 2) }
+    private var currencyCode: String { hostService?.currency ?? AppConfig.Payments.defaultCurrencyCode }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Booking Summary
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Review Your Booking")
+                        .font(.title2).bold()
+                    Divider()
+                    HStack {
+                        Text("Service").foregroundColor(.secondary)
+                        Spacer()
+                        Text(hostService?.service_name ?? selectedService.rawValue)
+                    }
+                    HStack {
+                        Text("Date").foregroundColor(.secondary)
+                        Spacer()
+                        Text(selectedDate.formatted(date: .long, time: .omitted))
+                    }
+                    HStack {
+                        Text("Time").foregroundColor(.secondary)
+                        Spacer()
+                        Text(selectedTime.formatted(date: .omitted, time: .shortened))
+                    }
+                    HStack {
+                        Text("Duration").foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(selectedDuration) hour\(selectedDuration == 1 ? "" : "s")")
+                    }
+                    HStack(alignment: .top) {
+                        Text("Location").foregroundColor(.secondary)
+                        Spacer()
+                        Text(location).multilineTextAlignment(.trailing)
+                    }
+                    if !specialInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        HStack(alignment: .top) {
+                            Text("Instructions").foregroundColor(.secondary)
+                            Spacer()
+                            Text(specialInstructions).multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+
+                // Payment Breakdown
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Payment Details").font(.headline)
+                    Divider()
+                    HStack {
+                        Text("Rate x Hours")
+                        Spacer()
+                        Text(formatCurrency(hourlyRate, code: currencyCode) + " x \(selectedDuration)")
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("Subtotal")
+                        Spacer()
+                        Text(formatCurrency(subtotal, code: currencyCode))
+                    }
+                    HStack {
+                        Text("GST (\(Int(gstPercent))%)")
+                        Spacer()
+                        Text(formatCurrency(gstAmount, code: currencyCode))
+                    }
+                    if platformFee > 0 {
+                        HStack {
+                            Text("Platform Fee")
+                            Spacer()
+                            Text(formatCurrency(platformFee, code: currencyCode))
+                        }
+                    }
+                    Divider()
+                    HStack {
+                        Text("Total").font(.headline)
+                        Spacer()
+                        Text(formatCurrency(total, code: currencyCode)).font(.headline)
+                    }
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+
+                Button(action: payNow) {
+                    HStack {
+                        if isPaying { ProgressView().tint(.white) }
+                        Text(isPaying ? "Processing…" : "Pay with Razorpay")
+                            .bold()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(isPaying)
+            }
+            .padding()
+        }
+        .navigationTitle("Payment Review")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Payment Failed", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+    }
+
+    private func payNow() {
+        guard authService.currentUser != nil else {
+            errorMessage = "Please sign in to continue."
+            showError = true
+            return
+        }
+        isPaying = true
+        let request = RazorpayService.PaymentRequest(
+            amount: total,
+            currencyCode: currencyCode,
+            description: "Booking payment for \(selectedService.dbValue)",
+            orderId: nil,
+            metadata: [
+                "service_type": selectedService.dbValue,
+                "duration": String(selectedDuration)
+            ],
+            customerEmail: authService.currentUser?.email,
+            customerPhone: authService.currentUser?.phone
+        )
+
+        Task {
+            do {
+                let result = try await RazorpayService.shared.pay(request)
+                isPaying = false
+                onPaySuccess(result.paymentId, result.status)
+                dismiss()
+            } catch {
+                isPaying = false
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
+                showError = true
+            }
+        }
+    }
+}
+
+private extension Double {
+    func rounded(toPlaces places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self * divisor).rounded() / divisor
     }
 }
 
