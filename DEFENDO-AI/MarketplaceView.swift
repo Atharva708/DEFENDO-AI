@@ -317,6 +317,7 @@ struct MarketplaceView: View {
                     Button("Filters") {}
                 }
             }
+            // --- Refined SuggestBot floating button with professional theme ---
             .onAppear(perform: fetchServices)
         }
     }
@@ -533,6 +534,402 @@ struct HostServiceDetailView: View {
                     .environmentObject(authService)
             }
         }
+    }
+}
+
+
+/// SuggestBotChatView: A simple local chat UI with hardcoded questions and answers,
+/// providing a basic suggestion at the end.
+//
+/// *** UPDATED DESIGN & THEMING: PROFESSIONAL, BUSINESSLIKE THEME USING APP COLORS AND POLISHED UI ***
+/// - Glassy blurred background with rounded corners, border, and shadow.
+/// - Prominent SuggestBot avatar with accent color glow.
+/// - Bot bubbles use accent color gradients, user bubbles use light surface with accent border.
+/// - Typography: Questions use .headline, answers use .body; branding subtitle added.
+/// - Smooth bubble transitions with combined moves and opacity.
+/// - Buttons styled with PrimaryButtonStyle and accent tint.
+/// - Custom close button at top-right with accent styling.
+/// - Footer with subtle "DEFENDO-AI" branding text.
+/// - Removed emoji mascot for sharp, clean design.
+/// - Thorough inline comments for maintainability.
+struct SuggestBotChatView: View {
+    @Binding var isPresented: Bool
+
+    // Questions and answer options
+    private enum Question: Int, CaseIterable {
+        case eventType
+        case areaSize
+        case securityNeed
+
+        var text: String {
+            switch self {
+            case .eventType: return "What type of event are you planning?"
+            case .areaSize: return "What is the approximate area size (sq ft)?"
+            case .securityNeed: return "What security level do you need?"
+            }
+        }
+
+        var options: [String] {
+            switch self {
+            case .eventType: return ["Wedding", "Concert", "Private Party", "Corporate", "Other"]
+            case .areaSize: return ["< 1000", "1000 - 5000", "5000 - 10000", "> 10000"]
+            case .securityNeed: return ["Low", "Medium", "High"]
+            }
+        }
+    }
+
+    // MARK: - State variables for question flow and answers
+    @State private var currentQuestionIndex: Int = 0
+    @State private var answers: [Question: String] = [:]
+    @State private var showSuggestion: Bool = false
+
+    @Namespace private var animationNamespace
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // --- Glassy blurred background with rounded corners, border, and shadow ---
+                Color.clear
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1.5)
+                    )
+                    .shadow(color: Color.accentColor.opacity(0.25), radius: 20, x: 0, y: 8)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 20) {
+                    // --- SuggestBot Avatar and Title with glow ---
+                    HStack(spacing: 16) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.accentColor.opacity(0.85), Color.accentColor.opacity(0.6)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing)
+                                )
+                                .frame(width: 72, height: 72)
+                                .shadow(color: Color.accentColor.opacity(0.6), radius: 12, x: 0, y: 6)
+                            Image(systemName: "shield.lefthalf.fill")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 36, height: 36)
+                                .foregroundColor(.white)
+                                .shadow(color: .black.opacity(0.35), radius: 5, x: 0, y: 3)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Suggest Bot")
+                                .font(.largeTitle.weight(.bold))
+                                .foregroundColor(Color.accentColor)
+                                .shadow(color: Color.accentColor.opacity(0.6), radius: 6, x: 0, y: 1)
+                            Text("Powered by DEFENDO-AI")
+                                .font(.subheadline)
+                                .foregroundColor(Color.accentColor.opacity(0.8))
+                                .italic()
+                        }
+                        Spacer()
+                        // --- Custom Close Button with accent styling ---
+                        Button {
+                            withAnimation {
+                                isPresented = false
+                            }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundColor(Color.accentColor)
+                                .shadow(color: Color.accentColor.opacity(0.7), radius: 4, x: 0, y: 2)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .accessibilityLabel("Close Suggest Bot")
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 16)
+
+                    if showSuggestion {
+                        // --- Suggestion View with polished style ---
+                        VStack(spacing: 24) {
+                            ScrollView {
+                                Text(suggestionText())
+                                    .multilineTextAlignment(.center)
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundColor(Color.accentColor)
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .fill(Color.accentColor.opacity(0.12))
+                                            .shadow(color: Color.accentColor.opacity(0.3), radius: 10, x: 0, y: 6)
+                                    )
+                                    .padding(.horizontal, 24)
+                                    .transition(.opacity.combined(with: .move(edge: .bottom)).animation(.easeInOut(duration: 0.5)))
+                            }
+                            Spacer()
+                            Button {
+                                withAnimation {
+                                    isPresented = false
+                                }
+                            } label: {
+                                Text("Close")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.vertical, 14)
+                                    .padding(.horizontal, 64)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 28)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [Color.accentColor, Color.accentColor.opacity(0.85)],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing)
+                                            )
+                                            .shadow(color: Color.accentColor.opacity(0.75), radius: 10, x: 0, y: 5)
+                                    )
+                            }
+                            .padding(.bottom, 20)
+                            .transition(.opacity.animation(.easeInOut(duration: 0.4)))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    } else {
+                        // --- Questions & Options with stylish chat bubbles and buttons ---
+                        VStack(spacing: 24) {
+                            ScrollViewReader { proxy in
+                                ScrollView {
+                                    VStack(spacing: 20) {
+                                        // Bot Question Bubble
+                                        ChatBubble(text: Question.allCases[currentQuestionIndex].text,
+                                                   isBot: true)
+                                        .id("question\(currentQuestionIndex)")
+                                        .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
+                                        .animation(.easeInOut(duration: 0.4), value: currentQuestionIndex)
+
+                                        // User Answer Bubble (if selected)
+                                        if let selectedAnswer = answers[Question.allCases[currentQuestionIndex]] {
+                                            ChatBubble(text: selectedAnswer,
+                                                       isBot: false)
+                                            .id("answer\(currentQuestionIndex)")
+                                            .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
+                                            .animation(.easeInOut(duration: 0.4), value: currentQuestionIndex)
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                    .padding(.top, 8)
+                                    .onChange(of: currentQuestionIndex) { _ in
+                                        withAnimation {
+                                            proxy.scrollTo("question\(currentQuestionIndex)", anchor: .bottom)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Options buttons styled with PrimaryButtonStyle and accent color
+                            VStack(spacing: 14) {
+                                ForEach(Question.allCases[currentQuestionIndex].options, id: \.self) { option in
+                                    Button(action: { selectAnswer(option) }) {
+                                        Text(option)
+                                            .font(.headline)
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(PrimaryButtonStyle())
+                                    .transition(.move(edge: .bottom).combined(with: .opacity).animation(.easeInOut(duration: 0.3)))
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 16)
+                        }
+                    }
+
+                    // --- Footer branding with subtle DEFENDO-AI text ---
+                    Text("© DEFENDO-AI 2025")
+                        .font(.footnote)
+                        .foregroundColor(Color.accentColor.opacity(0.5))
+                        .padding(.bottom, 8)
+                }
+            }
+            .navigationBarHidden(true)
+        }
+    }
+
+    /// Handles answer selection, advances question or shows suggestion.
+    private func selectAnswer(_ answer: String) {
+        guard let question = Question(rawValue: currentQuestionIndex) else { return }
+        withAnimation {
+            answers[question] = answer
+        }
+
+        if currentQuestionIndex + 1 < Question.allCases.count {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation {
+                    currentQuestionIndex += 1
+                }
+            }
+        } else {
+            // All questions answered, show suggestion
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation {
+                    showSuggestion = true
+                }
+            }
+        }
+    }
+
+    /// Generates suggestion text based on user's answers.
+    private func suggestionText() -> String {
+        // Simple hardcoded logic for suggestion based on answers
+        let eventType = answers[.eventType] ?? ""
+        let areaSize = answers[.areaSize] ?? ""
+        let securityNeed = answers[.securityNeed] ?? ""
+
+        var guards = 1
+        var drones = 0
+
+        switch securityNeed.lowercased() {
+        case "low":
+            guards = 1
+            drones = 0
+        case "medium":
+            guards = 2
+            drones = 1
+        case "high":
+            guards = 3
+            drones = 2
+        default:
+            guards = 1
+            drones = 0
+        }
+
+        // Adjust guards/drones by area size
+        switch areaSize {
+        case "< 1000":
+            break
+        case "1000 - 5000":
+            guards += 1
+        case "5000 - 10000":
+            guards += 2
+            drones += 1
+        case "> 10000":
+            guards += 3
+            drones += 2
+        default:
+            break
+        }
+
+        return "For your \(eventType.lowercased()) event in an area of \(areaSize), " +
+        "we recommend approximately \(guards) guard\(guards > 1 ? "s" : "") and \(drones) drone\(drones != 1 ? "s" : "") to ensure optimal security."
+    }
+}
+
+/// Chat bubble view used for SuggestBot questions (bot) and user answers
+/// *** Updated styling with businesslike theme and polished animations ***
+private struct ChatBubble: View {
+    let text: String
+    let isBot: Bool
+
+    var body: some View {
+        HStack {
+            if isBot {
+                // Bot bubble aligned left with accent gradient background and glow
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .bottom, spacing: 8) {
+                        // Bot icon left of bubble with accent color
+                        Image(systemName: "shield.lefthalf.fill")
+                            .foregroundColor(Color.accentColor)
+                            .font(.title3)
+                            .shadow(color: Color.accentColor.opacity(0.6), radius: 4, x: 0, y: 2)
+                            .padding(.bottom, 4)
+
+                        Text(text)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(16)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.accentColor.opacity(0.9), Color.accentColor.opacity(0.75)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing)
+                                    .clipShape(ChatBubbleShape(cornerRadius: 20, isBot: true))
+                            )
+                            .shadow(color: Color.accentColor.opacity(0.5), radius: 10, x: 0, y: 5)
+                    }
+                }
+                .frame(maxWidth: 320, alignment: .leading)
+                .padding(.leading, 18)
+                .padding(.trailing, 60)
+                .transition(.opacity.combined(with: .move(edge: .leading)))
+            } else {
+                // User bubble aligned right with light surface background and accent border
+                Spacer()
+                Text(text)
+                    .font(.body)
+                    .foregroundColor(Color.primary)
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: Color.black.opacity(0.06), radius: 1, x: 0, y: 1)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.accentColor.opacity(0.6), lineWidth: 1.5)
+                            )
+                    )
+                    .frame(maxWidth: 320, alignment: .trailing)
+                    .padding(.trailing, 18)
+                    .padding(.leading, 60)
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+            }
+        }
+    }
+}
+
+/// Custom shape for chat bubbles with tail on left (bot) or right (user)
+private struct ChatBubbleShape: Shape {
+    var cornerRadius: CGFloat = 16
+    var isBot: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let tailSize: CGFloat = 12
+        var path = Path()
+
+        if isBot {
+            // Bot bubble with tail on left bottom
+            path.move(to: CGPoint(x: tailSize, y: rect.maxY))
+            path.addLine(to: CGPoint(x: 0, y: rect.maxY + tailSize))
+            path.addLine(to: CGPoint(x: tailSize * 2, y: rect.maxY))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY + cornerRadius),
+                        tangent2End: CGPoint(x: rect.minX + cornerRadius, y: rect.minY),
+                        radius: cornerRadius)
+            path.addLine(to: CGPoint(x: rect.maxX - cornerRadius, y: rect.minY))
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY + cornerRadius),
+                        tangent2End: CGPoint(x: rect.maxX, y: rect.minY + cornerRadius * 2),
+                        radius: cornerRadius)
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+            path.addArc(tangent1End: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.maxX - cornerRadius * 2, y: rect.maxY),
+                        radius: cornerRadius)
+            path.addLine(to: CGPoint(x: tailSize * 2, y: rect.maxY))
+            path.closeSubpath()
+        } else {
+            // User bubble with tail on right bottom
+            path.move(to: CGPoint(x: rect.maxX - tailSize, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY + tailSize))
+            path.addLine(to: CGPoint(x: rect.maxX - tailSize * 2, y: rect.maxY))
+            path.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY + cornerRadius),
+                        tangent2End: CGPoint(x: rect.maxX - cornerRadius, y: rect.minY),
+                        radius: cornerRadius)
+            path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.minY))
+            path.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY + cornerRadius),
+                        tangent2End: CGPoint(x: rect.minX, y: rect.minY + cornerRadius * 2),
+                        radius: cornerRadius)
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - cornerRadius))
+            path.addArc(tangent1End: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY),
+                        tangent2End: CGPoint(x: rect.minX + cornerRadius * 2, y: rect.maxY),
+                        radius: cornerRadius)
+            path.addLine(to: CGPoint(x: rect.maxX - tailSize * 2, y: rect.maxY))
+            path.closeSubpath()
+        }
+
+        return path
     }
 }
 

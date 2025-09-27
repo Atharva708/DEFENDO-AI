@@ -9,6 +9,7 @@ struct BookingDetailView: View, Identifiable {
     
     @State private var region: MKCoordinateRegion = MKCoordinateRegion()
     @State private var showCancelAlert = false
+    @State private var showingCreateCommunity = false
     
     var body: some View {
         NavigationView {
@@ -29,6 +30,13 @@ struct BookingDetailView: View, Identifiable {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        // TODO: Implement contact support action
+                    } label: {
+                        Label("Contact Support", systemImage: "questionmark.circle")
+                    }
                 }
             }
         }
@@ -141,8 +149,8 @@ struct BookingDetailView: View, Identifiable {
     
     private var actions: some View {
         HStack(spacing: 10) {
-            Button("Contact Support") { /* open support */ }
-                .buttonStyle(SecondaryButtonStyle())
+            Button("Create Community") { showingCreateCommunity = true }
+                .buttonStyle(PrimaryButtonStyle())
             Button("Cancel Booking") { showCancelAlert = true }
                 .buttonStyle(PrimaryButtonStyle())
                 .tint(.red)
@@ -152,6 +160,9 @@ struct BookingDetailView: View, Identifiable {
             Button("Cancel Booking", role: .destructive) { cancelBooking() }
         } message: {
             Text("This action cannot be undone.")
+        }
+        .sheet(isPresented: $showingCreateCommunity) {
+            CreateCommunityForBookingView(booking: booking)
         }
     }
     
@@ -235,4 +246,81 @@ extension BookingDetailView {
             }
         }
     }
+}
+
+struct CreateCommunityForBookingView: View {
+    let booking: BookingData
+    @EnvironmentObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var communityService = CommunityService.shared
+
+    @State private var name: String = ""
+    @State private var description: String = ""
+    @State private var address: String = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+    @State private var createdCommunity: Community?
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Community Info")) {
+                    TextField("Community Name", text: $name)
+                    TextField("Description (optional)", text: $description)
+                    TextField("Address (optional)", text: $address)
+                }
+
+                if let guardName = booking.providerId.nonEmpty {
+                    Section(header: Text("Assigned Guard")) {
+                        Text(guardName)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if let error = errorMessage { Section { Text(error).foregroundColor(.red) } }
+            }
+            .navigationTitle("Create Community")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isCreating ? "Creating…" : "Create") { Task { await createCommunity() } }
+                        .disabled(isCreating || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .alert("Community Created", isPresented: .constant(createdCommunity != nil)) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("Your community \(createdCommunity?.name ?? "") has been created.")
+            }
+        }
+    }
+
+    private func createCommunity() async {
+        guard let userIdStr = authService.currentUser?.id, let adminId = UUID(uuidString: userIdStr) else {
+            errorMessage = "User not found"
+            return
+        }
+        isCreating = true
+        errorMessage = nil
+        do {
+            let community = try await communityService.createCommunity(
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                description: description.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                address: address.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                adminId: adminId
+            )
+            createdCommunity = community
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isCreating = false
+    }
+}
+
+private extension String {
+    var nonEmpty: String? { self.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self }
+    var nilIfEmpty: String? { let t = self.trimmingCharacters(in: .whitespacesAndNewlines); return t.isEmpty ? nil : t }
 }

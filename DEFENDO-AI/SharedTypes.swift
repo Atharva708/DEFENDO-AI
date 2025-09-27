@@ -26,6 +26,7 @@ class AppState: ObservableObject {
     @Published var currentScreen: Screen = .dashboard
     @Published var userRole: UserRole = .user
     @Published var selectedProviderForBooking: MarketplaceProvider? = nil
+    @Published var bookingToPresent: BookingData? = nil
     // Onboarding gating flags
     @Published var hasAcceptedTerms: Bool {
         didSet { UserDefaults.standard.set(hasAcceptedTerms, forKey: "hasAcceptedTerms") }
@@ -287,4 +288,3 @@ struct MarketplaceProvider: Identifiable, Codable {
     let verified: Bool
     let tags: [String]?
 }
-

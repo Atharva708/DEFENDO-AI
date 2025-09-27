@@ -38,7 +38,9 @@ struct BookingsView: View {
                         }
                     }
                     .padding(.horizontal)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.vertical)
                 .background(Color.black)
                 
@@ -62,8 +64,10 @@ struct BookingsView: View {
                                 BookingCardDynamic(booking: booking) {
                                     selectedBooking = booking
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
+                        .frame(maxWidth: .infinity)
                         .padding()
                         .transition(.opacity)
                         .animation(.easeInOut, value: bookings.count)
@@ -71,14 +75,47 @@ struct BookingsView: View {
                 }
                 .refreshable { await loadBookings() }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .navigationTitle("My Bookings")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        // TODO: Implement contact support action (e.g., open support screen or email)
+                    } label: {
+                        Label("Contact Support", systemImage: "questionmark.circle")
+                    }
+                }
+            }
             .searchable(text: $searchText, prompt: "Search bookings...")
             .onAppear { Task { await loadBookings() } }
+            .onChange(of: appState.bookingToPresent?.id) { _ in
+                guard let b = appState.bookingToPresent else { return }
+                // Ensure we have latest list then present
+                Task {
+                    if bookings.isEmpty { await loadBookings() }
+                    await MainActor.run {
+                        selectedBooking = b
+                        appState.bookingToPresent = nil
+                    }
+                }
+            }
+            .onAppear {
+                if let b = appState.bookingToPresent {
+                    Task {
+                        if bookings.isEmpty { await loadBookings() }
+                        await MainActor.run {
+                            selectedBooking = b
+                            appState.bookingToPresent = nil
+                        }
+                    }
+                }
+            }
             .sheet(item: $selectedBooking) { booking in
                 BookingDetailView(booking: booking)
                     .environmentObject(appState)
+                    .environmentObject(authService)
             }
         }
     }

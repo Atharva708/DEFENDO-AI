@@ -22,7 +22,6 @@ struct RootView: View {
                 LoadingView()
             } else if authService.isAuthenticated {
                 DashboardView()
-                    .onAppear { presentGatedModalsIfNeeded() }
             } else {
                 AuthenticationContainerView()
                     .onAppear { presentGatedModalsIfNeeded() }
@@ -61,6 +60,8 @@ struct RootView: View {
     }
 
     private func presentGatedModalsIfNeeded() {
+        // Do not show terms/privacy if user is already authenticated
+        guard !authService.isAuthenticated else { return }
         if !appState.hasAcceptedTerms {
             showTerms = true
         } else if !appState.hasAcceptedPrivacy {
@@ -239,10 +240,10 @@ struct DashboardView: View {
                 }
                 .tag(3)
             
-            ProfileView()
+            CommunityView()
                 .tabItem {
-                    Image(systemName: "person.fill")
-                    Text("Profile")
+                    Image(systemName: "building.2.fill")
+                    Text("Community")
                 }
                 .tag(4)
         }
@@ -263,7 +264,7 @@ struct DashboardView: View {
                         CoachMark(text: "Map helps you explore professionals and live safety zones.")
                         CoachMark(text: "Explore lets you browse services and providers.")
                         CoachMark(text: "Bookings keeps your upcoming and past bookings.")
-                        CoachMark(text: "Profile manages your account and settings.")
+                        CoachMark(text: "Community shows your community members, guards, and activity.")
                         Button("Got it") {
                             appState.hasShownOnboardingTips = true
                             finish()
@@ -280,6 +281,7 @@ struct DashboardView: View {
 // MARK: - Home View
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
+    @State private var showingProfile = false
     
     var body: some View {
         NavigationView {
@@ -300,10 +302,27 @@ struct HomeView: View {
                     // Mini Heatmap
                     MiniHeatmapCard()
                 }
-                .padding()
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .background(
+                NavigationLink(isActive: $showingProfile) {
+                    ProfileView()
+                } label: {
+                    EmptyView()
+                }
+                .hidden()
+            )
             .navigationTitle("DEFENDO-AI")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showingProfile = true }) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
         }
     }
 }

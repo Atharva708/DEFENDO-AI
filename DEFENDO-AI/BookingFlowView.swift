@@ -23,8 +23,18 @@ struct BookingFlowView: View {
     @State private var selectedDate = Date()
     @State private var selectedTime = Date()
     
+    // MARK: - Duration & Unit State
+    enum DurationUnit: String, CaseIterable {
+        case hour = "Hour"
+        case day = "Day"
+        case month = "Month"
+    }
+    @State private var durationUnit: DurationUnit = .hour
+    @State private var selectedHours: Int = 4
+    @State private var selectedDays: Int = 1
+    @State private var selectedMonths: Int = 1
+    
     // Step 3
-    @State private var selectedDuration = 4
     @State private var location = ""
     @State private var specialInstructions = ""
     
@@ -60,7 +70,8 @@ struct BookingFlowView: View {
                             selectedService: selectedService,
                             selectedDate: selectedDate,
                             selectedTime: selectedTime,
-                            selectedDuration: selectedDuration,
+                            selectedDuration: getDurationValue(),
+                            durationUnit: durationUnit, // pass durationUnit here
                             location: location,
                             specialInstructions: specialInstructions,
                             hostService: service
@@ -115,7 +126,7 @@ struct BookingFlowView: View {
                                 .padding(.horizontal, 20)
                             
                             if let pricePerHour = hostService.price_per_hour {
-                                Text(formatCurrency(pricePerHour, code: hostService.currency))
+                                Text(formatCurrency(pricePerHour, code: hostService.currency) + " / hr")
                                     .font(.headline)
                                     .foregroundColor(.secondary)
                             }
@@ -148,7 +159,7 @@ struct BookingFlowView: View {
                                         .fontWeight(.semibold)
                                     
                                     if let pricePerHour = service?.price_per_hour {
-                                Text(formatCurrency(pricePerHour, code: service?.currency ?? AppConfig.Payments.defaultCurrencyCode) + " / hr")
+                                        Text(formatCurrency(pricePerHour, code: service?.currency ?? AppConfig.Payments.defaultCurrencyCode) + " / hr")
                                             .foregroundColor(.secondary)
                                     }
                                 }
@@ -200,10 +211,47 @@ struct BookingFlowView: View {
                                 .padding(.bottom, 12)
                             }
                         case 2:
-                            DurationLocationStep(selectedDuration: $selectedDuration,
-                                                 location: $location,
-                                                 specialInstructions: $specialInstructions)
-                                .padding(.horizontal)
+                            // Duration & Location Step with Unit Selection and Stepper for each unit type
+                            ScrollView {
+                                VStack(spacing: 16) {
+                                    // Unit Picker Segmented Control
+                                    Picker("Duration Unit", selection: $durationUnit) {
+                                        ForEach(DurationUnit.allCases, id: \.self) { unit in
+                                            Text(unit.rawValue).tag(unit)
+                                        }
+                                    }
+                                    .pickerStyle(SegmentedPickerStyle())
+                                    .padding(.horizontal)
+                                    
+                                    // Show Stepper based on selected unit
+                                    Group {
+                                        switch durationUnit {
+                                        case .hour:
+                                            Stepper(value: $selectedHours, in: 1...24) {
+                                                Text("Hours: \(selectedHours)")
+                                            }
+                                            .padding(.horizontal)
+                                        case .day:
+                                            Stepper(value: $selectedDays, in: 1...30) {
+                                                Text("Days: \(selectedDays)")
+                                            }
+                                            .padding(.horizontal)
+                                        case .month:
+                                            Stepper(value: $selectedMonths, in: 1...12) {
+                                                Text("Months: \(selectedMonths)")
+                                            }
+                                            .padding(.horizontal)
+                                        }
+                                    }
+                                    
+                                    // Location and Special Instructions fields
+                                    DurationLocationStep(
+                                        selectedDuration: .constant(1), // Dummy binding, actual duration handled separately
+                                        location: $location,
+                                        specialInstructions: $specialInstructions
+                                    )
+                                    .padding(.horizontal)
+                                }
                                 .padding(.top, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 24)
@@ -211,12 +259,15 @@ struct BookingFlowView: View {
                                         .shadow(radius: 7, y: 2)
                                 )
                                 .padding(.horizontal)
+                                .padding(.bottom, 12)
+                            }
                         case 3:
                             ReviewConfirmStep(
                                 selectedService: selectedService,
                                 selectedDate: selectedDate,
                                 selectedTime: selectedTime,
-                                selectedDuration: selectedDuration,
+                                selectedDuration: getDurationValue(),
+                                durationUnit: durationUnit, // pass durationUnit here
                                 location: location,
                                 specialInstructions: specialInstructions,
                                 hostService: service,
@@ -306,7 +357,8 @@ struct BookingFlowView: View {
                     serviceType: selectedService,
                     date: selectedDate,
                     time: selectedTime,
-                    duration: selectedDuration,
+                    duration: getDurationValue(),
+                    durationUnit: durationUnit, // pass durationUnit here
                     location: location,
                     price: calculateTotalPrice(),
                     transactionId: lastPaymentId,
@@ -314,6 +366,15 @@ struct BookingFlowView: View {
                     hostService: service
                 )
             }
+        }
+    }
+    
+    // Get actual duration value based on selected unit
+    private func getDurationValue() -> Int {
+        switch durationUnit {
+        case .hour: return selectedHours
+        case .day: return selectedDays
+        case .month: return selectedMonths
         }
     }
     
@@ -343,7 +404,16 @@ struct BookingFlowView: View {
             
         case 2:
             let locationTrimmed = location.trimmingCharacters(in: .whitespacesAndNewlines)
-            return selectedDuration > 0 && !locationTrimmed.isEmpty
+            let durationValid: Bool
+            switch durationUnit {
+            case .hour:
+                durationValid = selectedHours > 0
+            case .day:
+                durationValid = selectedDays > 0
+            case .month:
+                durationValid = selectedMonths > 0
+            }
+            return durationValid && !locationTrimmed.isEmpty
             
         case 3:
             return true
@@ -366,12 +436,21 @@ struct BookingFlowView: View {
         startComponents.hour = timeComponents.hour
         startComponents.minute = timeComponents.minute
         let startTime = calendar.date(from: startComponents) ?? selectedDate
-        let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
+        
+        // Calculate endTime based on duration and unit
+        let endTime: Date
+        switch durationUnit {
+        case .hour:
+            endTime = calendar.date(byAdding: .hour, value: selectedHours, to: startTime) ?? startTime
+        case .day:
+            endTime = calendar.date(byAdding: .day, value: selectedDays, to: startTime) ?? startTime
+        case .month:
+            endTime = calendar.date(byAdding: .month, value: selectedMonths, to: startTime) ?? startTime
+        }
         
         // Require authenticated user
         guard let userId = authService.currentUser?.id else {
             // Show error alert (using alert here instead of paymentError)
-            // Could be enhanced with a state for an alert if needed
             return
         }
         
@@ -384,28 +463,34 @@ struct BookingFlowView: View {
             return
         }
         
-        let priceToUse: Double
-        
+        // Price per unit to use for calculation
+        let pricePerUnit: Double
         if let hostService = service {
-            priceToUse = hostService.price_per_hour ?? calculateTotalPrice() / Double(selectedDuration)
+            pricePerUnit = hostService.price_per_hour ?? defaultRateForSelectedServiceAndUnit()
         } else {
-            priceToUse = calculateTotalPrice() / Double(selectedDuration)
+            pricePerUnit = defaultRateForSelectedServiceAndUnit()
         }
+        
+        // Calculate total duration in units
+        let durationValue = getDurationValue()
+        
+        // Total price before GST
+        let basePrice = pricePerUnit * Double(durationValue)
         
         let bookingData = BookingData(
             id: UUID().uuidString,
             userId: userId,
             providerId: provider_id,
-            serviceType: selectedService, // Use selectedService instead of .securityGuard
+            serviceType: selectedService,
             date: selectedDate,
             startTime: startTime,
             endTime: endTime,
-            durationHours: selectedDuration,
+            durationHours: durationValue,
             location: location,
             latitude: nil as Double?,
             longitude: nil as Double?,
             status: .pending,
-            price: applyGst(priceToUse * Double(selectedDuration)),
+            price: applyGst(basePrice),
             userNotes: specialInstructions,
             paymentStatus: "pending",
             paymentId: nil,
@@ -416,10 +501,16 @@ struct BookingFlowView: View {
         // 1) Process payment first
         let currencyCode = service?.currency ?? AppConfig.Payments.defaultCurrencyCode
         let totalAmount = bookingData.price
+        let priceLabel: String
+        switch durationUnit {
+        case .hour: priceLabel = "hour"
+        case .day: priceLabel = "day"
+        case .month: priceLabel = "month"
+        }
         let paymentRequest = RazorpayService.PaymentRequest(
             amount: totalAmount,
             currencyCode: currencyCode,
-            description: "Booking payment for \(selectedService.dbValue)",
+            description: "Booking payment for \(selectedService.dbValue) - \(durationValue) \(priceLabel)\(durationValue > 1 ? "s" : "")",
             orderId: nil,
             metadata: ["provider_id": provider_id],
             customerEmail: authService.currentUser?.email,
@@ -459,6 +550,7 @@ struct BookingFlowView: View {
                 lastPaymentId = result.paymentId
                 lastBookingId = paidBooking.id
                 triggerHapticSuccess()
+                appState.bookingToPresent = paidBooking
                 // Redirect to bookings page
                 await MainActor.run { appState.currentScreen = .booking }
                 // Fire background status notifications
@@ -471,6 +563,19 @@ struct BookingFlowView: View {
             triggerHapticError()
         }
     }
+    
+    // Default rates for services if no hostService price available
+    private func defaultRateForSelectedServiceAndUnit() -> Double {
+        let baseRate: Double = selectedService == .bodyguard ? 25.0 : 35.0
+        switch durationUnit {
+        case .hour:
+            return baseRate
+        case .day:
+            return baseRate * 20 // Approximate 1 day = 20 hours pricing
+        case .month:
+            return baseRate * 20 * 30 // Approximate 1 month = 30 days pricing
+        }
+    }
 
     // MARK: - Finalize booking after payment (used by PaymentReviewView)
     @MainActor
@@ -481,14 +586,36 @@ struct BookingFlowView: View {
         startComponents.hour = timeComponents.hour
         startComponents.minute = timeComponents.minute
         let startTime = calendar.date(from: startComponents) ?? selectedDate
-        let endTime = calendar.date(byAdding: .hour, value: selectedDuration, to: startTime) ?? startTime
+        
+        // Calculate endTime based on duration and unit
+        let endTime: Date
+        switch durationUnit {
+        case .hour:
+            endTime = calendar.date(byAdding: .hour, value: selectedHours, to: startTime) ?? startTime
+        case .day:
+            endTime = calendar.date(byAdding: .day, value: selectedDays, to: startTime) ?? startTime
+        case .month:
+            endTime = calendar.date(byAdding: .month, value: selectedMonths, to: startTime) ?? startTime
+        }
 
         guard let userId = authService.currentUser?.id else { return }
         guard let hostService = service else { return }
         let providerId = hostService.provider_id ?? hostService.id
-
-        let pricePerHour = hostService.price_per_hour ?? (selectedService == .bodyguard ? 25.0 : 35.0)
-        let price = applyGst(pricePerHour * Double(selectedDuration))
+        
+        // Use hostService price per hour or default scaled by unit and duration
+        let baseRatePerHour = hostService.price_per_hour ?? (selectedService == .bodyguard ? 25.0 : 35.0)
+        let pricePerUnit: Double
+        switch durationUnit {
+        case .hour:
+            pricePerUnit = baseRatePerHour
+        case .day:
+            pricePerUnit = baseRatePerHour * 20 // Approximate 1 day = 20 hours pricing
+        case .month:
+            pricePerUnit = baseRatePerHour * 20 * 30 // Approximate 1 month = 30 days pricing
+        }
+        
+        let durationValue = getDurationValue()
+        let price = applyGst(pricePerUnit * Double(durationValue))
 
         let paidBooking = BookingData(
             id: UUID().uuidString,
@@ -498,7 +625,7 @@ struct BookingFlowView: View {
             date: selectedDate,
             startTime: startTime,
             endTime: endTime,
-            durationHours: selectedDuration,
+            durationHours: durationValue,
             location: location,
             latitude: nil as Double?,
             longitude: nil as Double?,
@@ -517,13 +644,14 @@ struct BookingFlowView: View {
             lastPaymentId = paymentId
             lastBookingId = paidBooking.id
             triggerHapticSuccess()
+            appState.bookingToPresent = paidBooking
             await MainActor.run { appState.currentScreen = .booking }
             Task { await simulateLiveStatusNotifications(for: paidBooking) }
         } else {
             triggerHapticError()
         }
     }
-
+    
     // User-friendly service display name
     private func serviceDisplayName(_ type: ServiceType) -> String {
         type.dbValue.replacingOccurrences(of: "_", with: " ")
@@ -544,12 +672,21 @@ struct BookingFlowView: View {
     }
     
     private func calculateTotalPrice() -> Double {
+        let durationValue = getDurationValue()
+        let pricePerUnit: Double
         if let hostService = service, let pricePerHour = hostService.price_per_hour {
-            return applyGst(pricePerHour * Double(selectedDuration))
+            switch durationUnit {
+            case .hour:
+                pricePerUnit = pricePerHour
+            case .day:
+                pricePerUnit = pricePerHour * 20
+            case .month:
+                pricePerUnit = pricePerHour * 20 * 30
+            }
         } else {
-            let hourlyRate = selectedService == .bodyguard ? 25.0 : 35.0
-            return applyGst(hourlyRate * Double(selectedDuration))
+            pricePerUnit = defaultRateForSelectedServiceAndUnit()
         }
+        return applyGst(pricePerUnit * Double(durationValue))
     }
 
     private func applyGst(_ base: Double) -> Double {
@@ -598,6 +735,7 @@ struct ReviewConfirmStep: View {
     let selectedDate: Date
     let selectedTime: Date
     let selectedDuration: Int
+    let durationUnit: BookingFlowView.DurationUnit // Added durationUnit here
     let location: String
     let specialInstructions: String
     
@@ -638,7 +776,8 @@ struct ReviewConfirmStep: View {
                     
                     infoRow(iconName: "clock", iconColor: .orange, title: "Time", subtitle: selectedTime.formatted(date: .omitted, time: .shortened))
                     
-                    infoRow(iconName: "hourglass", iconColor: .purple, title: "Duration", subtitle: "\(selectedDuration) hour\(selectedDuration == 1 ? "" : "s")")
+                    // Updated to show duration unit-aware label
+                    infoRow(iconName: "hourglass", iconColor: .purple, title: "Duration", subtitle: "\(selectedDuration) \(durationUnit.rawValue)\(selectedDuration == 1 ? "" : "s")")
                     
                     infoRow(iconName: "mappin.and.ellipse", iconColor: .red, title: "Location", subtitle: location)
                     
@@ -678,15 +817,14 @@ struct ReviewConfirmStep: View {
     }
 }
 
-// MARK: - PaymentMethod Enum Removed
-
-// MARK: - BookingConfirmationView (unchanged, used for final confirmation)
+// MARK: - BookingConfirmationView (updated for duration unit-aware display)
 
 struct BookingConfirmationView: View {
     let serviceType: ServiceType
     let date: Date
     let time: Date
     let duration: Int
+    let durationUnit: BookingFlowView.DurationUnit // Added durationUnit parameter
     let location: String
     let price: Double
     var transactionId: String? = nil
@@ -730,7 +868,8 @@ struct BookingConfirmationView: View {
                 
                 confirmationRow(title: "Date:", value: date.formatted(date: .long, time: .omitted))
                 confirmationRow(title: "Time:", value: time.formatted(date: .omitted, time: .shortened))
-                confirmationRow(title: "Duration:", value: "\(duration) hour\(duration == 1 ? "" : "s")")
+                // Updated duration display with unit-aware label
+                confirmationRow(title: "Duration:", value: "\(duration) \(durationUnit.rawValue)\(duration == 1 ? "" : "s")")
                 confirmationRow(title: "Location:", value: location)
                 confirmationRow(title: "Total Paid:", value: String(format: "₹%.2f", price))
                 if let tid = transactionId {
@@ -838,6 +977,7 @@ struct PaymentReviewView: View {
     let selectedDate: Date
     let selectedTime: Date
     let selectedDuration: Int
+    let durationUnit: BookingFlowView.DurationUnit // Added durationUnit parameter
     let location: String
     let specialInstructions: String
     let hostService: HostService?
@@ -847,6 +987,7 @@ struct PaymentReviewView: View {
     @State private var showError: Bool = false
     @State private var errorMessage: String = ""
 
+    // Calculate hourly rate based on hostService or default service
     private var hourlyRate: Double {
         if let hostService = hostService, let pricePerHour = hostService.price_per_hour {
             return pricePerHour
@@ -854,13 +995,36 @@ struct PaymentReviewView: View {
         return selectedService == .bodyguard ? 25.0 : 35.0
     }
 
-    private var subtotal: Double { hourlyRate * Double(selectedDuration) }
+    // Calculate subtotal considering duration unit
+    private var subtotal: Double {
+        // Apply multiplier based on durationUnit
+        let multiplier: Double
+        switch durationUnit {
+        case .hour:
+            multiplier = 1.0
+        case .day:
+            multiplier = 20.0
+        case .month:
+            multiplier = 20.0 * 30.0
+        }
+        return hourlyRate * multiplier * Double(selectedDuration)
+    }
+    
     private var gstPercent: Double { AppConfig.Payments.gstPercent }
     private var gstAmount: Double { subtotal * (gstPercent / 100.0) }
     private var platformFee: Double { 0.0 }
     private var total: Double { (subtotal + gstAmount + platformFee).rounded(toPlaces: 2) }
     private var currencyCode: String { hostService?.currency ?? AppConfig.Payments.defaultCurrencyCode }
-
+    
+    // Display rate label depending on duration unit
+    private var rateLabel: String {
+        switch durationUnit {
+        case .hour: return "/hr"
+        case .day: return "/day"
+        case .month: return "/month"
+        }
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -887,7 +1051,7 @@ struct PaymentReviewView: View {
                     HStack {
                         Text("Duration").foregroundColor(.secondary)
                         Spacer()
-                        Text("\(selectedDuration) hour\(selectedDuration == 1 ? "" : "s")")
+                        Text("\(selectedDuration) \(durationUnit.rawValue)\(selectedDuration == 1 ? "" : "s")")
                     }
                     HStack(alignment: .top) {
                         Text("Location").foregroundColor(.secondary)
@@ -910,9 +1074,9 @@ struct PaymentReviewView: View {
                     Text("Payment Details").font(.headline)
                     Divider()
                     HStack {
-                        Text("Rate x Hours")
+                        Text("Rate \(rateLabel)")
                         Spacer()
-                        Text(formatCurrency(hourlyRate, code: currencyCode) + " x \(selectedDuration)")
+                        Text(formatCurrency(hourlyRate, code: currencyCode) + " x \(selectedDuration) \(durationUnit.rawValue)\(selectedDuration == 1 ? "" : "s")")
                             .foregroundColor(.secondary)
                     }
                     HStack {
