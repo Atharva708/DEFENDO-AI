@@ -234,145 +234,275 @@ struct NewBookingFlowView: View, Identifiable {
 // MARK: - MarketplaceView and related views
 
 struct MarketplaceView: View {
-    @State private var services: [HostService] = []
-    @State private var isLoading = true
-    @State private var fetchError: String? = nil
-    @State private var selectedService: HostService? = nil
-    @State private var searchText: String = ""
-    @State private var selectedCategory: String = "Guards"
+    @StateObject private var vm = ServiceDiscoveryViewModel()
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var authService: AuthService
 
     var body: some View {
         NavigationView {
-            Group {
-                if isLoading {
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            ForEach(0..<6, id: \.self) { _ in ServiceSkeletonCard() }
-                        }
-                        .padding()
+            VStack(spacing: 0) {
+                // Search field with suggestions
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                        TextField("Search services e.g. guards, drones", text: $vm.query)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
                     }
-                } else if let error = fetchError {
-                    ErrorStateView(
-                        title: "Failed to load services",
-                        message: error,
-                        retryTitle: "Retry",
-                        onRetry: { fetchServices() }
-                    )
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(16)
+
+                    if !vm.suggestions.isEmpty && !vm.query.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(vm.suggestions, id: \.self) { suggestion in
+                                    Button(action: { vm.applySuggestion(suggestion) }) {
+                                        Text(suggestion)
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 10)
+                                            .background(Color.accentColor.opacity(0.15))
+                                            .foregroundColor(.accentColor)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+                }
+                .padding([.horizontal, .top])
+
+                if vm.isLoading && vm.cards.isEmpty {
+                    ScrollView { VStack(spacing: 16) { ForEach(0..<6, id: \.self) { _ in ServiceSkeletonCard() } }.padding() }
+                } else if let error = vm.errorMessage {
+                    ErrorStateView(title: "Failed to load", message: error, retryTitle: "Retry", onRetry: { vm.retry() })
                 } else {
                     ScrollView {
-                        VStack(spacing: 16) {
-                            // Search Bar
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(.secondary)
-                                TextField("Search providers...", text: $searchText)
-                                    .textInputAutocapitalization(.never)
-                                    .disableAutocorrection(true)
+                        LazyVStack(spacing: 16) {
+                            ForEach(vm.cards) { card in
+                                CompanyCardView(card: card)
+                                    .onAppear { vm.loadMoreIfNeeded(currentId: card.id) }
+                                    .onTapGesture { vm.selectedCompany = card }
                             }
-                            .padding()
-                            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
-
-                            // Category Pills
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(categories, id: \.self) { cat in
-                                        Button(action: { selectedCategory = cat }) {
-                                            Text(cat)
-                                                .fontWeight(.semibold)
-                                                .padding(.vertical, 10)
-                                                .padding(.horizontal, 16)
-                                                .background(selectedCategory == cat ? Color.accentColor : Color(.secondarySystemBackground))
-                                                .foregroundColor(selectedCategory == cat ? .white : .primary)
-                                                .clipShape(Capsule())
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 2)
-                            }
-
-                            // Results
-                            LazyVStack(spacing: 20) {
-                                ForEach(filteredServices) { service in
-                                    VStack(spacing: 12) {
-                                        ServiceCardView(service: service)
-                                            .onTapGesture { selectedService = service }
-                                        Button("Book Now") { selectedService = service }
-                                            .buttonStyle(PrimaryButtonStyle())
-                                    }
-                                }
-                            }
+                            if vm.isLoadingMore { ProgressView().padding(.vertical) }
                         }
                         .padding()
-                    }
-                    .sheet(item: $selectedService) { svc in
-                        HostServiceDetailView(service: svc)
                     }
                 }
             }
             .navigationTitle("Marketplace")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Filters") {}
+            .background(Color.black.opacity(0.95))
+            .sheet(item: $vm.selectedCompany) { company in
+                HostSubservicesView(hostId: company.id, hostName: company.companyName)
+                    .environmentObject(appState)
+                    .environmentObject(authService)
+            }
+        }
+        .onAppear { vm.start() }
+    }
+}
+
+// MARK: - Company Card UI (glassmorphism)
+struct CompanyCardView: View {
+    let card: SupabaseService.CompanyCardData
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                AsyncImage(url: URL(string: card.logoUrl ?? "")) { phase in
+                    switch phase {
+                    case .empty: ProgressView()
+                    case .success(let img): img.resizable().scaledToFill()
+                    case .failure(_): Image(systemName: "building.2.crop.circle").resizable().scaledToFit().foregroundColor(.accentColor)
+                    @unknown default: EmptyView()
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.companyName).font(.headline)
+                    HStack(spacing: 8) {
+                        if let rating = card.rating { Label(String(format: "%.1f", rating), systemImage: "star.fill").labelStyle(.titleAndIcon).foregroundColor(.yellow).font(.caption) }
+                        if let city = card.city { Text(city).font(.caption).foregroundColor(.secondary) }
+                    }
+                }
+                Spacer()
+                Button("View Services") {}
+                    .buttonStyle(PrimaryButtonStyle())
+            }
+            if !card.previewImages.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(card.previewImages, id: \.self) { urlStr in
+                        AsyncImage(url: URL(string: urlStr)) { phase in
+                            switch phase {
+                            case .empty: Color.gray.opacity(0.2)
+                            case .success(let img): img.resizable().scaledToFill()
+                            case .failure(_): Color.gray.opacity(0.2)
+                            @unknown default: Color.gray.opacity(0.2)
+                            }
+                        }
+                        .frame(width: 72, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                .shadow(color: Color.accentColor.opacity(0.15), radius: 12, x: 0, y: 8)
+        )
+    }
+}
+
+// MARK: - Subservices List
+struct HostSubservicesView: View, Identifiable {
+    let id = UUID()
+    let hostId: String
+    let hostName: String
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var services: [HostService] = []
+    @State private var isLoading = true
+    @State private var error: String? = nil
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading { ProgressView("Loading...") }
+                else if let error = error { ErrorStateView(title: "Failed to load", message: error, retryTitle: "Retry", onRetry: load) }
+                else {
+                    List {
+                        ForEach(services) { svc in
+                            HStack(alignment: .top, spacing: 12) {
+                                AsyncImage(url: URL(string: svc.images?.first ?? "")) { phase in
+                                    switch phase { case .empty: Color.gray.opacity(0.2); case .success(let img): img.resizable().scaledToFill(); case .failure(_): Color.gray.opacity(0.2); @unknown default: Color.gray.opacity(0.2) }
+                                }
+                                .frame(width: 76, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(svc.service_name).font(.headline)
+                                    if let desc = svc.description { Text(desc).font(.caption).foregroundColor(.secondary).lineLimit(2) }
+                                    if let rating = svc.rating { HStack(spacing: 4) { Image(systemName: "star.fill").foregroundColor(.yellow).font(.caption2); Text(String(format: "%.1f", rating)).font(.caption2).foregroundColor(.secondary) } }
+                                }
+                                Spacer()
+                                Button("Book Now") { presentBooking(for: svc) }
+                                    .buttonStyle(PrimaryButtonStyle())
+                            }
+                            .listRowBackground(Color.clear.background(.ultraThinMaterial))
+                        }
+                    }
+                    .listStyle(.plain)
                 }
             }
-            // --- Refined SuggestBot floating button with professional theme ---
-            .onAppear(perform: fetchServices)
+            .navigationTitle(hostName)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .onAppear(perform: load)
         }
     }
 
-    private var categories: [String] {
-        ["Guards", "Drones", "Studios", "Agencies", "Escort", "Surveillance"]
-    }
-
-    private var filteredServices: [HostService] {
-        services.filter { svc in
-            let matchesSearch: Bool = searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                svc.service_name.localizedCaseInsensitiveContains(searchText) ||
-                (svc.city?.localizedCaseInsensitiveContains(searchText) ?? false)
-            let matchesCategory: Bool
-            switch selectedCategory {
-            case "Guards":
-                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("guard")
-            case "Drones":
-                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("drone")
-            case "Studios":
-                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("studio")
-            case "Agencies":
-                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("agency")
-            case "Escort":
-                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("escort")
-            case "Surveillance":
-                matchesCategory = (svc.service_type ?? "").localizedCaseInsensitiveContains("surveillance")
-            default:
-                matchesCategory = true
-            }
-            return matchesSearch && (matchesCategory || selectedCategory.isEmpty)
-        }
-    }
-
-    private func fetchServices() {
-        isLoading = true
-        fetchError = nil
+    private func load() {
+        isLoading = true; error = nil
         Task {
             do {
-                // TODO: Implement fetchHostServices() in SupabaseService
-                if let fetched: [HostService] = try? await SupabaseService.shared.fetchHostServices() {
-                    await MainActor.run {
-                        self.services = fetched
-                        self.isLoading = false
-                    }
-                } else {
-                    throw NSError(domain: "No data", code: -1, userInfo: nil)
-                }
-            } catch {
-                await MainActor.run {
-                    self.fetchError = error.localizedDescription
-                    self.isLoading = false
-                }
-            }
+                let result = try await SupabaseService.shared.fetchSubcategoryServices(for: hostId)
+                await MainActor.run { self.services = result; self.isLoading = false }
+            } catch { await MainActor.run { self.error = error.localizedDescription; self.isLoading = false } }
         }
+    }
+
+    private func presentBooking(for service: HostService) {
+        // Reuse existing BookingFlowView with prefilled HostService
+        // Shown via sheet from here
+        let _ = service // keep for clarity
+        // In this screen we show a sheet inline for booking
+        // However, Marketplace already presents booking in HostServiceDetailView
+        // For simplicity, open HostServiceDetailView here
+        let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene
+        let hosting = UIHostingController(rootView: HostServiceDetailView(service: service).environmentObject(appState).environmentObject(authService))
+        hosting.modalPresentationStyle = .formSheet
+        windowScene?.keyWindow?.rootViewController?.present(hosting, animated: true)
+    }
+}
+
+// MARK: - ViewModel
+final class ServiceDiscoveryViewModel: ObservableObject, Identifiable {
+    @Published var query: String = "" { didSet { scheduleSearch() } }
+    @Published var cards: [SupabaseService.CompanyCardData] = []
+    @Published var isLoading: Bool = false
+    @Published var isLoadingMore: Bool = false
+    @Published var errorMessage: String? = nil
+    @Published var selectedCompany: SupabaseService.CompanyCardData? = nil
+    @Published var suggestions: [String] = []
+
+    private var offset: Int = 0
+    private let pageSize: Int = 12
+    private var hasMore: Bool = true
+    private var debounceTask: Task<Void, Never>? = nil
+
+    func start() { loadRecentSuggestions(); performSearch(reset: true) }
+    func retry() { performSearch(reset: true) }
+    func applySuggestion(_ text: String) { query = text }
+
+    func loadMoreIfNeeded(currentId: String) {
+        guard hasMore, !isLoadingMore, let last = cards.last, last.id == currentId else { return }
+        isLoadingMore = true
+        Task { await fetchPage() }
+    }
+
+    private func scheduleSearch() {
+        debounceTask?.cancel()
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            await MainActor.run { self?.performSearch(reset: true) }
+        }
+        saveRecentQuery(query)
+        updateSuggestions(for: query)
+    }
+
+    private func performSearch(reset: Bool) {
+        if reset { offset = 0; hasMore = true; cards.removeAll() }
+        isLoading = reset
+        errorMessage = nil
+        Task { await fetchPage() }
+    }
+
+    @MainActor
+    private func fetchPage() async {
+        do {
+            let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            let data = try await SupabaseService.shared.searchCompanies(offering: q.isEmpty ? "guard" : q, limit: pageSize, offset: offset)
+            if data.count < pageSize { hasMore = false }
+            offset += data.count
+            cards.append(contentsOf: data)
+            isLoading = false; isLoadingMore = false
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false; isLoadingMore = false
+        }
+    }
+
+    // MARK: - Suggestions caching
+    private let recentKey = "recent_service_queries"
+    private func loadRecentSuggestions() { suggestions = (UserDefaults.standard.array(forKey: recentKey) as? [String]) ?? [] }
+    private func saveRecentQuery(_ q: String) {
+        let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var recents = (UserDefaults.standard.array(forKey: recentKey) as? [String]) ?? []
+        recents.removeAll { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
+        recents.insert(trimmed, at: 0)
+        if recents.count > 8 { recents = Array(recents.prefix(8)) }
+        UserDefaults.standard.set(recents, forKey: recentKey)
+        suggestions = recents
+    }
+    private func updateSuggestions(for q: String) {
+        let recents = (UserDefaults.standard.array(forKey: recentKey) as? [String]) ?? []
+        guard !q.isEmpty else { suggestions = recents; return }
+        suggestions = recents.filter { $0.localizedCaseInsensitiveContains(q) }
     }
 }
 
