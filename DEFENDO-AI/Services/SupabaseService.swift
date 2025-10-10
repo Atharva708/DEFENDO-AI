@@ -789,6 +789,32 @@ class SupabaseService: ObservableObject {
         }
     }
 
+    // MARK: - Employees by Host
+
+    nonisolated(unsafe) struct EmployeeRow: Codable, Sendable {
+        let id: String
+        let host_id: String
+        let name: String
+        let role: String
+        let phone: String
+        let photo_url: String?
+        let experience_years: Int?
+        let location: String?
+        let status: String
+        let created_at: String?
+        let updated_at: String?
+    }
+
+    func fetchEmployeesForHost(hostId: String) async throws -> [EmployeeRow] {
+        let resp: PostgrestResponse<[EmployeeRow]> = try await client
+            .from("employees")
+            .select()
+            .eq("host_id", value: hostId)
+            .order("updated_at", ascending: false)
+            .execute()
+        return resp.value
+    }
+
     // MARK: - Location History
 
     /// Saves location history record for a user.

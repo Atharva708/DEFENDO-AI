@@ -293,7 +293,7 @@ struct MarketplaceView: View {
             }
             .navigationTitle("Marketplace")
             .sheet(item: $vm.selectedCompany) { company in
-                HostSubservicesView(hostId: company.id, hostName: company.companyName)
+                CompanyEmployeesView(hostId: company.id, companyName: company.companyName)
                     .environmentObject(appState)
                     .environmentObject(authService)
             }
@@ -326,34 +326,11 @@ struct CompanyCardViewV2: View {
                     }
                 }
                 Spacer()
-                Button("View Services") {}
-                    .buttonStyle(PrimaryButtonStyle())
-            }
-            if !card.previewImages.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(card.previewImages, id: \.self) { urlStr in
-                        AsyncImage(url: URL(string: urlStr)) { phase in
-                            switch phase {
-                            case .empty: Color.gray.opacity(0.2)
-                            case .success(let img): img.resizable().scaledToFill()
-                            case .failure(_): Color.gray.opacity(0.2)
-                            @unknown default: Color.gray.opacity(0.2)
-                            }
-                        }
-                        .frame(width: 72, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                }
-                .transition(.opacity)
+                Image(systemName: "chevron.right").foregroundColor(.secondary)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.08), lineWidth: 1))
-                .shadow(color: Color.accentColor.opacity(0.15), radius: 12, x: 0, y: 8)
-        )
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
     }
 }
 
@@ -424,6 +401,92 @@ struct HostSubservicesView: View, Identifiable {
     }
 }
 
+// MARK: - Company Employees Standalone Page
+struct CompanyEmployeesView: View, Identifiable {
+    let id = UUID()
+    let hostId: String
+    let companyName: String
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var employees: [SupabaseService.EmployeeRow] = []
+    @State private var isLoading = true
+    @State private var error: String? = nil
+    @State private var cart: [CartItem] = []
+    @State private var showCart: Bool = false
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading { ProgressView("Loading...") }
+                else if let error = error { ErrorStateView(title: "Failed to load", message: error, retryTitle: "Retry", onRetry: load) }
+                else {
+                    List {
+                        ForEach(employees, id: \.id) { emp in
+                            Button(action: { addEmployeeAndGoToCart(emp) }) {
+                                HStack(spacing: 12) {
+                                    AsyncImage(url: URL(string: emp.photo_url ?? "")) { phase in
+                                        switch phase { case .empty: Color.gray.opacity(0.2); case .success(let img): img.resizable().scaledToFill(); case .failure(_): Color.gray.opacity(0.2); @unknown default: Color.gray.opacity(0.2) }
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    .clipShape(Circle())
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(emp.name).font(.subheadline).bold().foregroundColor(.primary)
+                                        Text(emp.role).font(.caption).foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "plus.circle.fill").foregroundColor(.accentColor)
+                                }
+                            }
+                            .listRowBackground(Color.clear.background(.ultraThinMaterial))
+                        }
+                    }
+                    .listStyle(.plain)
+        .background(
+                        NavigationLink(isActive: $showCart) {
+                            CartView(items: $cart, serviceCard: pseudoServiceCard)
+                                .environmentObject(authService)
+                        } label: { EmptyView() }
+                            .hidden()
+                    )
+                }
+            }
+            .navigationTitle(companyName)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .onAppear(perform: load)
+        }
+    }
+
+    private var pseudoServiceCard: SupabaseService.MarketplaceServiceCard {
+        SupabaseService.MarketplaceServiceCard(
+            id: "", service_name: companyName, image_url: nil,
+            price_per_hour: nil, currency: "INR", rating: nil, total_bookings: nil,
+            host_id: hostId, company_name: companyName, logo_url: nil
+        )
+    }
+
+    private func load() {
+        isLoading = true; error = nil
+        Task {
+            do {
+                let team = try await SupabaseService.shared.fetchEmployeesForHost(hostId: hostId)
+                await MainActor.run { self.employees = team; self.isLoading = false }
+            } catch { await MainActor.run { self.error = error.localizedDescription; self.isLoading = false } }
+        }
+    }
+
+    private func addEmployeeAndGoToCart(_ emp: SupabaseService.EmployeeRow) {
+        let pseudo = SupabaseService.ServiceSubcategory(
+            id: emp.id, service_id: "", host_id: hostId,
+            label: emp.name, price_per_hour: 0, currency: "INR",
+            description: emp.role, is_active: true
+        )
+        let item = CartItem(id: UUID().uuidString, sub: pseudo, quantity: 1, durationHours: 1)
+        cart = [item]
+        showCart = true
+    }
+}
+
 // MARK: - ViewModel
 final class ServiceDiscoveryViewModel: ObservableObject, Identifiable {
     @Published var query: String = "" { didSet { scheduleSearch() } }
@@ -470,10 +533,28 @@ final class ServiceDiscoveryViewModel: ObservableObject, Identifiable {
     private func fetchPage() async {
         do {
             let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            let data = try await SupabaseService.shared.searchCompanies(offering: q.isEmpty ? "guard" : q, limit: pageSize, offset: offset)
-            if data.count < pageSize { hasMore = false }
-            offset += data.count
-            cards.append(contentsOf: data)
+            if q.isEmpty {
+                // Fetch companies directly from host_profiles
+                let companies = try await SupabaseService.shared.fetchCompanies()
+                let mapped: [SupabaseCompanyCardData] = companies.map {
+                    SupabaseCompanyCardData(
+                        id: $0.id,
+                        companyName: $0.name,
+                        logoUrl: $0.logo_url,
+                        rating: $0.rating,
+                        city: $0.location,
+                        previewImages: []
+                    )
+                }
+                hasMore = false
+                offset += mapped.count
+                cards.append(contentsOf: mapped)
+            } else {
+                let data = try await SupabaseService.shared.searchCompanies(offering: q, limit: pageSize, offset: offset)
+                if data.count < pageSize { hasMore = false }
+                offset += data.count
+                cards.append(contentsOf: data)
+            }
             isLoading = false; isLoadingMore = false
         } catch {
             errorMessage = error.localizedDescription
@@ -923,6 +1004,7 @@ struct MarketplaceCard: View {
 struct ServiceStandaloneView: View {
     let serviceCard: SupabaseService.MarketplaceServiceCard
     @State private var subs: [SupabaseService.ServiceSubcategory] = []
+    @State private var employees: [SupabaseService.EmployeeRow] = []
     @State private var isLoading = true
     @State private var error: String? = nil
     @State private var cart: [CartItem] = []
@@ -935,6 +1017,28 @@ struct ServiceStandaloneView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if !employees.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Team").font(.headline)
+                        ForEach(employees, id: \.id) { emp in
+                            HStack(spacing: 10) {
+                                AsyncImage(url: URL(string: emp.photo_url ?? "")) { phase in
+                                    switch phase { case .empty: Color.gray.opacity(0.2); case .success(let img): img.resizable().scaledToFill(); case .failure(_): Color.gray.opacity(0.2); @unknown default: Color.gray.opacity(0.2) }
+                                }
+                                .frame(width: 44, height: 44)
+                                .clipShape(Circle())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(emp.name).font(.subheadline).bold()
+                                    Text(emp.role).font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                if let years = emp.experience_years { Text("\(years) yrs").font(.caption).foregroundColor(.secondary) }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+                }
                 if isLoading { ProgressView() }
                 else if let error = error { ErrorStateView(title: "Failed", message: error, retryTitle: "Retry", onRetry: load) }
                 else {
@@ -988,7 +1092,12 @@ struct ServiceStandaloneView: View {
         Task {
             do {
                 let data = try await SupabaseService.shared.fetchSubcategories(serviceId: serviceCard.id, hostId: serviceCard.host_id)
-                await MainActor.run { self.subs = data; self.isLoading = false }
+                let team = try await SupabaseService.shared.fetchEmployeesForHost(hostId: serviceCard.host_id)
+                await MainActor.run {
+                    self.subs = data
+                    self.employees = team
+                    self.isLoading = false
+                }
             } catch { await MainActor.run { self.error = error.localizedDescription; self.isLoading = false } }
         }
     }
