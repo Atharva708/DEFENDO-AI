@@ -588,7 +588,7 @@ class SupabaseService: ObservableObject {
             .select()
             .or("service_type.ilike.\(like),service_name.ilike.\(like)")
             .order("created_at", ascending: false)
-            .range(offset, to: max(offset, offset + limit - 1))
+            .range(from: offset, to: max(offset, offset + limit - 1))
             .execute()
 
         let services = servicesResp.value
@@ -599,7 +599,7 @@ class SupabaseService: ObservableObject {
         let hostsResp: PostgrestResponse<[HostProfileRow]> = try await client
             .from("host_profiles")
             .select()
-            .in_("id", values: providerIds)
+            .in("id", values: providerIds)
             .execute()
 
         let hostsById = Dictionary(uniqueKeysWithValues: hostsResp.value.map { ($0.id, $0) })
@@ -622,14 +622,19 @@ class SupabaseService: ObservableObject {
             .from("host_services")
             .select()
             .eq("provider_id", value: hostId)
-            .order("service_name", ascending: true)
+            // defer ordering until after optional filters
+            
 
         if let q = query, !q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let like = "%" + q + "%"
             builder = builder.or("service_type.ilike.\(like),service_name.ilike.\(like)")
         }
+        // apply ordering last to avoid type mismatch on builder
+        builder = builder.order("service_name", ascending: true) as! PostgrestFilterBuilder
 
-        let response: PostgrestResponse<[HostServiceRow]> = try await builder.execute()
+        let response: PostgrestResponse<[HostServiceRow]> = try await builder
+            .order("service_name", ascending: true)
+            .execute()
         return response.value.map { row in
             HostService(
                 id: row.id,
@@ -647,6 +652,139 @@ class SupabaseService: ObservableObject {
                 is_active: row.is_active,
                 total_bookings: row.total_bookings,
                 provider_id: row.provider_id
+            )
+        }
+    }
+
+    // MARK: - Marketplace (Swiggy-style): Joined Services
+
+    struct MarketplaceServiceCard: Identifiable, Sendable {
+        let id: String                 // service_id
+        let service_name: String
+        let image_url: String?
+        let price_per_hour: Double?
+        let currency: String?
+        let rating: Double?
+        let total_bookings: Int?
+        let host_id: String
+        let company_name: String
+        let logo_url: String?
+    }
+
+    /// Fetch active services joined with host/company details (client-side join)
+    func fetchActiveServicesWithHosts() async throws -> [MarketplaceServiceCard] {
+        let servicesResp: PostgrestResponse<[HostServiceRow]> = try await client
+            .from("host_services")
+            .select()
+            .eq("is_active", value: true)
+            .order("created_at", ascending: false)
+            .execute()
+
+        let services = servicesResp.value
+        let providerIds = Array(Set(services.compactMap { $0.provider_id }))
+        var hostsById: [String: HostProfileRow] = [:]
+        if !providerIds.isEmpty {
+            let hostsResp: PostgrestResponse<[HostProfileRow]> = try await client
+                .from("host_profiles")
+                .select()
+                .in("id", values: providerIds)
+                .execute()
+            hostsById = Dictionary(uniqueKeysWithValues: hostsResp.value.map { ($0.id, $0) })
+        }
+
+        return services.map { row in
+            let host = hostsById[row.provider_id ?? ""]
+            return MarketplaceServiceCard(
+                id: row.id,
+                service_name: row.service_name,
+                image_url: row.images?.first,
+                price_per_hour: row.price_per_hour,
+                currency: row.currency,
+                rating: row.rating,
+                total_bookings: row.total_bookings,
+                host_id: row.provider_id ?? "",
+                company_name: host?.company_name ?? host?.full_name ?? "Company",
+                logo_url: host?.logo_path ?? host?.avatar_url
+            )
+        }
+    }
+
+    // MARK: - Subcategories
+
+    nonisolated(unsafe) struct HostServiceSubcategoryRow: Codable, Sendable {
+        let id: String
+        let service_id: String
+        let host_id: String
+        let subcategory_key: String
+        let subcategory_label: String
+        let subcategory_type: String?
+        let price_per_hour: Double
+        let currency: String
+        let description: String?
+        let is_active: Bool
+        let display_order: Int?
+        let created_at: String?
+        let updated_at: String?
+    }
+
+    struct ServiceSubcategory: Identifiable, Sendable {
+        let id: String
+        let service_id: String
+        let host_id: String
+        let label: String
+        let price_per_hour: Double
+        let currency: String
+        let description: String?
+        let is_active: Bool
+    }
+
+    func fetchSubcategories(serviceId: String, hostId: String) async throws -> [ServiceSubcategory] {
+        let resp: PostgrestResponse<[HostServiceSubcategoryRow]> = try await client
+            .from("host_service_subcategories")
+            .select()
+            .eq("service_id", value: serviceId)
+            .eq("host_id", value: hostId)
+            .order("display_order", ascending: true)
+            .execute()
+
+        return resp.value.map { row in
+            ServiceSubcategory(
+                id: row.id,
+                service_id: row.service_id,
+                host_id: row.host_id,
+                label: row.subcategory_label,
+                price_per_hour: row.price_per_hour,
+                currency: row.currency,
+                description: row.description,
+                is_active: row.is_active
+            )
+        }
+    }
+
+    /// Fetch companies that currently have active rows in host_services
+    func fetchCompaniesFromHostServices() async throws -> [Company] {
+        let servicesResp: PostgrestResponse<[HostServiceRow]> = try await client
+            .from("host_services")
+            .select("provider_id")
+            .eq("is_active", value: true)
+            .execute()
+        let providerIds = Array(Set(servicesResp.value.compactMap { $0.provider_id }))
+        guard !providerIds.isEmpty else { return [] }
+
+        let hostsResp: PostgrestResponse<[HostProfileRow]> = try await client
+            .from("host_profiles")
+            .select()
+            .in("id", values: providerIds)
+            .execute()
+
+        return hostsResp.value.map { row in
+            Company(
+                id: row.id,
+                name: row.company_name ?? row.full_name ?? "Security Company",
+                logo_url: row.logo_path ?? row.avatar_url,
+                rating: row.rating,
+                location: row.address,
+                description: nil
             )
         }
     }

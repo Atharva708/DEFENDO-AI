@@ -243,18 +243,18 @@ struct MarketplaceView: View {
             VStack(spacing: 0) {
                 // Search field with suggestions
                 VStack(spacing: 8) {
-                    HStack {
+                            HStack {
                         Image(systemName: "magnifyingglass").foregroundColor(.secondary)
                         TextField("Search services e.g. guards, drones", text: $vm.query)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                    }
-                    .padding()
+                                    .textInputAutocapitalization(.never)
+                                    .disableAutocorrection(true)
+                            }
+                            .padding()
                     .background(.ultraThinMaterial)
                     .cornerRadius(16)
 
                     if !vm.suggestions.isEmpty && !vm.query.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
+                            ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
                                 ForEach(vm.suggestions, id: \.self) { suggestion in
                                     Button(action: { vm.applySuggestion(suggestion) }) {
@@ -263,10 +263,10 @@ struct MarketplaceView: View {
                                             .padding(.horizontal, 10)
                                             .background(Color.accentColor.opacity(0.15))
                                             .foregroundColor(.accentColor)
-                                            .clipShape(Capsule())
+                                                .clipShape(Capsule())
+                                        }
                                     }
                                 }
-                            }
                         }
                         .transition(.opacity)
                     }
@@ -670,10 +670,10 @@ struct SuggestBotChatView: View {
                                 ScrollView {
                                     VStack(spacing: 20) {
                                         ChatBubble(text: Question.allCases[currentQuestionIndex].text, isBot: true)
-                                            .id("question\(currentQuestionIndex)")
+                                        .id("question\(currentQuestionIndex)")
                                         if let selectedAnswer = answers[Question.allCases[currentQuestionIndex]] {
                                             ChatBubble(text: selectedAnswer, isBot: false)
-                                                .id("answer\(currentQuestionIndex)")
+                                            .id("answer\(currentQuestionIndex)")
                                         }
                                     }
                                     .padding(.horizontal)
@@ -848,4 +848,305 @@ private func currencyString(_ amount: Double, code: String?) -> String {
     f.numberStyle = .currency
     f.currencyCode = code ?? AppConfig.Payments.defaultCurrencyCode
     return f.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+}
+
+// MARK: - New Modular Marketplace (Swiggy/Zomato style)
+
+struct MarketplacePage: View {
+    @State private var isLoading = true
+    @State private var error: String? = nil
+    @State private var cards: [SupabaseService.MarketplaceServiceCard] = []
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading { ProgressView("Loading...") }
+                else if let error = error { ErrorStateView(title: "Failed to load", message: error, retryTitle: "Retry", onRetry: load) }
+                else {
+                    ScrollView {
+                        LazyVStack(spacing: 16) {
+                            ForEach(cards) { card in
+                                NavigationLink(destination: ServiceStandaloneView(serviceCard: card)) {
+                                    MarketplaceCard(card: card)
+                                }
+                            }
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .navigationTitle("Explore Services")
+            .onAppear(perform: load)
+        }
+    }
+
+    private func load() {
+        isLoading = true; error = nil
+        Task {
+            do {
+                let result = try await SupabaseService.shared.fetchActiveServicesWithHosts()
+                await MainActor.run { self.cards = result; self.isLoading = false }
+            } catch { await MainActor.run { self.error = error.localizedDescription; self.isLoading = false } }
+        }
+    }
+}
+
+struct MarketplaceCard: View {
+    let card: SupabaseService.MarketplaceServiceCard
+    var body: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: card.image_url ?? "")) { phase in
+                switch phase { case .empty: Color.gray.opacity(0.2); case .success(let img): img.resizable().scaledToFill(); case .failure(_): Color.gray.opacity(0.2); @unknown default: Color.gray.opacity(0.2) }
+            }
+            .frame(width: 84, height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(card.service_name).font(.headline).lineLimit(1)
+                HStack(spacing: 6) {
+                    if let rating = card.rating { Label(String(format: "%.1f", rating), systemImage: "star.fill").foregroundColor(.yellow).font(.caption) }
+                    if let count = card.total_bookings { Text("\(count) bookings").font(.caption).foregroundColor(.secondary) }
+                }
+                HStack(spacing: 6) {
+                    if let pph = card.price_per_hour { Text("\(currencyString(pph, code: card.currency)) / hr").font(.subheadline).foregroundColor(.accentColor) }
+                    Text(card.company_name).font(.caption).foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+    }
+}
+
+// Service detail with subcategories and cart add
+struct ServiceStandaloneView: View {
+    let serviceCard: SupabaseService.MarketplaceServiceCard
+    @State private var subs: [SupabaseService.ServiceSubcategory] = []
+    @State private var isLoading = true
+    @State private var error: String? = nil
+    @State private var cart: [CartItem] = []
+
+    var totalPrice: Double {
+        cart.reduce(0) { $0 + $1.totalPrice }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                if isLoading { ProgressView() }
+                else if let error = error { ErrorStateView(title: "Failed", message: error, retryTitle: "Retry", onRetry: load) }
+                else {
+                    ForEach(subs) { sc in
+                        ServiceDetailCard(sub: sc, onAdd: { addItem(sub: sc) })
+                    }
+                }
+                if !cart.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(cart) { item in
+                            CartItemCard(item: binding(for: item))
+                        }
+                        HStack {
+                            Text("Total").font(.headline)
+                            Spacer()
+                            Text(currencyString(totalPrice, code: serviceCard.currency))
+                                .font(.headline).foregroundColor(.accentColor)
+                        }
+                        NavigationLink("Go to Cart") {
+                            CartView(items: $cart, serviceCard: serviceCard)
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                    }
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground)))
+                }
+            }
+            .padding()
+        }
+        .navigationTitle(serviceCard.service_name)
+        .onAppear(perform: load)
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            AsyncImage(url: URL(string: serviceCard.image_url ?? "")) { phase in
+                switch phase { case .empty: Color.gray.opacity(0.2); case .success(let img): img.resizable().scaledToFill(); case .failure(_): Color.gray.opacity(0.2); @unknown default: Color.gray.opacity(0.2) }
+            }
+            .frame(width: 84, height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(serviceCard.company_name).font(.headline)
+                if let rating = serviceCard.rating { Label(String(format: "%.1f", rating), systemImage: "star.fill").foregroundColor(.yellow).font(.caption) }
+            }
+            Spacer()
+        }
+    }
+
+    private func load() {
+        isLoading = true; error = nil
+        Task {
+            do {
+                let data = try await SupabaseService.shared.fetchSubcategories(serviceId: serviceCard.id, hostId: serviceCard.host_id)
+                await MainActor.run { self.subs = data; self.isLoading = false }
+            } catch { await MainActor.run { self.error = error.localizedDescription; self.isLoading = false } }
+        }
+    }
+
+    private func addItem(sub: SupabaseService.ServiceSubcategory) {
+        let item = CartItem(id: UUID().uuidString, sub: sub, quantity: 1, durationHours: 1)
+        cart.append(item)
+    }
+
+    private func binding(for item: CartItem) -> Binding<CartItem> {
+        guard let idx = cart.firstIndex(where: { $0.id == item.id }) else {
+            return .constant(item)
+        }
+        return $cart[idx]
+    }
+}
+
+struct ServiceDetailCard: View {
+    let sub: SupabaseService.ServiceSubcategory
+    let onAdd: () -> Void
+    @State private var tempQty: Int = 1
+    @State private var tempDuration: Int = 1
+    @State private var durationUnit: DurationUnit = .hours
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(sub.label).font(.headline)
+            if let desc = sub.description { Text(desc).font(.caption).foregroundColor(.secondary) }
+            Text("\(sub.currency) \(String(format: "%.2f", sub.price_per_hour)) / hr").font(.subheadline).foregroundColor(.accentColor)
+            HStack {
+                Stepper("Guards: \(tempQty)", value: $tempQty, in: 1...50)
+                Spacer()
+                Picker("Unit", selection: $durationUnit) {
+                    ForEach(DurationUnit.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+                Stepper("Duration: \(tempDuration) \(durationUnit.short)", value: $tempDuration, in: 1...240)
+            }
+            Button("Add to Cart") { onAdd() }
+                .buttonStyle(PrimaryButtonStyle())
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground)))
+    }
+}
+
+enum DurationUnit: CaseIterable { case hours, days, months
+    var title: String { switch self { case .hours: return "Hours"; case .days: return "Days"; case .months: return "Months" } }
+    var short: String { switch self { case .hours: return "hrs"; case .days: return "days"; case .months: return "months" } }
+    func toHours(_ value: Int) -> Int { switch self { case .hours: return value; case .days: return value * 24; case .months: return value * 24 * 30 } }
+}
+
+struct CartItem: Identifiable, Equatable {
+    let id: String
+    let sub: SupabaseService.ServiceSubcategory
+    var quantity: Int
+    var durationHours: Int
+    var pricePerHour: Double { sub.price_per_hour }
+    var totalPrice: Double { Double(quantity * durationHours) * pricePerHour }
+    static func == (lhs: CartItem, rhs: CartItem) -> Bool { lhs.id == rhs.id }
+}
+
+struct CartItemCard: View {
+    @Binding var item: CartItem
+    @State private var unit: DurationUnit = .hours
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(item.sub.label).font(.subheadline).bold()
+            HStack {
+                Stepper("Guards: \(item.quantity)", value: $item.quantity, in: 1...50)
+                Spacer()
+                Picker("Unit", selection: $unit) {
+                    ForEach(DurationUnit.allCases, id: \.self) { Text($0.title).tag($0) }
+                }.pickerStyle(.menu)
+                Stepper("Duration: \(displayDuration)", onIncrement: { item.durationHours += step }, onDecrement: { item.durationHours = max(1, item.durationHours - step) })
+            }
+            HStack {
+                Text("Item Total")
+                Spacer()
+                Text(currencyString(item.totalPrice, code: "INR")).foregroundColor(.accentColor)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
+    }
+    private var step: Int { switch unit { case .hours: return 1; case .days: return 24; case .months: return 24 * 30 } }
+    private var displayDuration: String {
+        switch unit { case .hours: return "\(item.durationHours) hrs"
+        case .days: return "\(item.durationHours / 24) days"
+        case .months: return "\(item.durationHours / (24*30)) months" }
+    }
+}
+
+struct CartView: View {
+    @Binding var items: [CartItem]
+    let serviceCard: SupabaseService.MarketplaceServiceCard
+    @EnvironmentObject var authService: AuthService
+    @State private var isSubmitting = false
+    @State private var error: String? = nil
+    @State private var success: Bool = false
+
+    var total: Double { items.reduce(0) { $0 + $1.totalPrice } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let error = error { Text(error).foregroundColor(.red) }
+            List {
+                ForEach($items) { $item in
+                    CartItemCard(item: $item)
+                }
+            }
+            HStack { Text("Total").font(.headline); Spacer(); Text(currencyString(total, code: serviceCard.currency)).font(.headline).foregroundColor(.accentColor) }
+            Button(action: submitBooking) {
+                Text(isSubmitting ? "Submitting..." : "Confirm Booking")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(isSubmitting || items.isEmpty)
+            if success { Text("Booking created!").foregroundColor(.green) }
+        }
+        .padding()
+        .navigationTitle("Cart")
+    }
+
+    private func submitBooking() {
+        guard let user = authService.currentUser else { error = "Not logged in"; return }
+        isSubmitting = true; error = nil; success = false
+        Task {
+            do {
+                // aggregate hours and price for a simple booking entry
+                let totalHours = items.reduce(0) { $0 + $1.durationHours * $1.quantity }
+                let totalPrice = total
+                let start = Date()
+                let end = Calendar.current.date(byAdding: .hour, value: max(1, totalHours), to: start) ?? start
+                let booking = BookingData(
+                    id: UUID().uuidString,
+                    userId: user.id,
+                    providerId: serviceCard.host_id,
+                    serviceType: ServiceType.fromDb("guard"),
+                    date: Date(),
+                    startTime: start,
+                    endTime: end,
+                    durationHours: max(1, totalHours),
+                    location: "",
+                    latitude: nil,
+                    longitude: nil,
+                    status: BookingStatus.pending,
+                    price: totalPrice,
+                    userNotes: nil,
+                    paymentStatus: "pending",
+                    paymentId: nil,
+                    paymentGateway: nil,
+                    paymentMeta: nil
+                )
+                _ = try await SupabaseService.shared.createBooking(booking)
+                await MainActor.run { success = true; isSubmitting = false }
+            } catch let err {
+                await MainActor.run { self.error = err.localizedDescription; self.isSubmitting = false }
+            }
+        }
+    }
 }
