@@ -535,87 +535,88 @@ class SupabaseService: ObservableObject {
         }
     }
 
-    // MARK: - Marketplace: Company and Subcategory Discovery
+    // MARK: - Marketplace: Companies & Company Services
 
-    /// Represents a company card composed from `hosts` and aggregated `host_services`
-    struct CompanyCardData: Identifiable, Sendable {
-        let id: String             // host id
-        let companyName: String
-        let logoUrl: String?
-        let rating: Double?
-        let city: String?
-        let distanceKm: Double?
-        let serviceSummary: String
-        let previewImages: [String]
+    /// Fetch all companies (hosts) from Supabase `host_profiles`
+    func fetchCompanies() async throws -> [Company] {
+        let response: PostgrestResponse<[HostProfileRow]> = try await client
+            .from("host_profiles")
+            .select()
+            .order("created_at", ascending: false)
+            .execute()
+
+        return response.value.map { row in
+            Company(
+                id: row.id,
+                name: row.company_name ?? row.full_name ?? "Security Company",
+                logo_url: row.logo_path ?? row.avatar_url,
+                rating: row.rating,
+                location: row.address,
+                description: nil
+            )
+        }
     }
 
-    /// Search companies (hosts) that offer services matching the query. Uses `host_services` filtered by
-    /// `service_type` or `service_name`, then joins host details from `hosts`.
-    /// Implements simple pagination with `limit` and `offset` on the services list before grouping.
-    func searchCompanies(offering query: String, limit: Int = 20, offset: Int = 0) async throws -> [CompanyCardData] {
-        // 1) Fetch matching services
+    /// Fetch services for a given company from `host_services`
+    func fetchServicesForCompany(companyId: String) async throws -> [CompanyService] {
+        let response: PostgrestResponse<[HostServiceRow]> = try await client
+            .from("host_services")
+            .select()
+            .eq("provider_id", value: companyId)
+            .order("created_at", ascending: false)
+            .execute()
+
+        return response.value.map { row in
+            CompanyService(
+                id: row.id,
+                company_id: row.provider_id ?? companyId,
+                service_name: row.service_name,
+                service_type: row.service_type ?? "",
+                price: row.price,
+                availability: row.is_active ?? true,
+                image_url: row.images?.first
+            )
+        }
+    }
+
+    /// Search companies (hosts) that offer services matching the query.
+    /// Aggregates from `host_services` and joins with `host_profiles`.
+    func searchCompanies(offering query: String, limit: Int = 20, offset: Int = 0) async throws -> [SupabaseCompanyCardData] {
         let like = "%" + query + "%"
         let servicesResp: PostgrestResponse<[HostServiceRow]> = try await client
             .from("host_services")
             .select()
-            .or(
-                "service_type.ilike.\(like),service_name.ilike.\(like)"
-            )
+            .or("service_type.ilike.\(like),service_name.ilike.\(like)")
             .order("created_at", ascending: false)
             .range(offset, to: max(offset, offset + limit - 1))
             .execute()
 
         let services = servicesResp.value
-        // 2) Group by provider_id
-        let servicesByProvider = Dictionary(grouping: services, by: { $0.provider_id ?? "" })
-            .filter { !$0.key.isEmpty }
-
-        // 3) Fetch host rows for providers in this page
+        let servicesByProvider = Dictionary(grouping: services, by: { $0.provider_id ?? "" }).filter { !$0.key.isEmpty }
         let providerIds = Array(servicesByProvider.keys)
         if providerIds.isEmpty { return [] }
 
-        // Supabase `in` filter requires a CSV list in parentheses
-        let idList = providerIds.joined(separator: ",")
-        let hostsResp: PostgrestResponse<[HostRow]> = try await client
-            .from("hosts")
+        let hostsResp: PostgrestResponse<[HostProfileRow]> = try await client
+            .from("host_profiles")
             .select()
             .in_("id", values: providerIds)
             .execute()
 
         let hostsById = Dictionary(uniqueKeysWithValues: hostsResp.value.map { ($0.id, $0) })
-
-        // 4) Build CompanyCardData list
-        var cards: [CompanyCardData] = []
-        for (providerId, svcList) in servicesByProvider {
-            guard let host = hostsById[providerId] else { continue }
-            // Build service summary: top 2 unique service_type/service_name
-            let names = Array(Set(svcList.compactMap { $0.service_type ?? $0.service_name })).prefix(2)
-            let summary = names.joined(separator: ", ")
-            // Use up to 3 preview images from the first few services
-            let images = svcList.compactMap { $0.images?.first }.prefix(3)
-            let card = CompanyCardData(
-                id: host.id,
-                companyName: host.company_name ?? "Company",
-                logoUrl: host.logo_url,
-                rating: host.rating,
-                city: host.city,
-                distanceKm: nil,
-                serviceSummary: summary,
-                previewImages: Array(images)
-            )
-            cards.append(card)
+        var cards: [SupabaseCompanyCardData] = []
+        for providerId in providerIds {
+            guard let rows = servicesByProvider[providerId], let host = hostsById[providerId] else { continue }
+            let previews = rows.compactMap { $0.images?.first }.prefix(3)
+            let name = host.company_name ?? host.full_name ?? "Company"
+            let logo = host.logo_path ?? host.avatar_url
+            let city = host.address
+            let rating = host.rating
+            cards.append(SupabaseCompanyCardData(id: providerId, companyName: name, logoUrl: logo, rating: rating, city: city, previewImages: Array(previews)))
         }
-
-        // Keep deterministic order matching services list order
-        let order = providerIds
-        let ordered = cards.sorted { lhs, rhs in
-            guard let li = order.firstIndex(of: lhs.id), let ri = order.firstIndex(of: rhs.id) else { return false }
-            return li < ri
-        }
-        return ordered
+        return cards
     }
 
-    /// Fetch all subcategory services for a specific host (provider), optionally filtered by a service query.
+    /// Fetch all subcategory services for a specific host (provider)
     func fetchSubcategoryServices(for hostId: String, matching query: String? = nil) async throws -> [HostService] {
         var builder = client
             .from("host_services")
@@ -775,15 +776,22 @@ nonisolated(unsafe) struct HostServiceRow: Codable, Sendable {
     let updated_at: String?
 }
 
-// Hosts table row used to build company cards
-nonisolated(unsafe) struct HostRow: Codable, Sendable {
+// Company row from Supabase host_profiles
+nonisolated(unsafe) struct HostProfileRow: Codable, Sendable {
     let id: String
+    let email: String?
+    let full_name: String?
     let company_name: String?
-    let logo_url: String?
+    let avatar_url: String?
+    let phone: String?
+    let address: String?
+    let services_offered: [String]? // generic array
+    let verified: Bool?
     let rating: Double?
-    let city: String?
-    let latitude: Double?
-    let longitude: Double?
+    let reviews: Int?
+    let created_at: String?
+    let updated_at: String?
+    let logo_path: String?
 }
 
 // MARK: - Insert/Update Helper Payloads
@@ -950,6 +958,27 @@ extension DateFormatter {
         formatter.timeStyle = .short
         return formatter
     }()
+}
+
+// MARK: - Marketplace App Models
+
+struct Company: Identifiable, Sendable, Codable {
+    let id: String
+    let name: String
+    let logo_url: String?
+    let rating: Double?
+    let location: String?
+    let description: String?
+}
+
+struct CompanyService: Identifiable, Sendable, Codable {
+    let id: String
+    let company_id: String
+    let service_name: String
+    let service_type: String
+    let price: Double?
+    let availability: Bool
+    let image_url: String?
 }
 
 /// Example function demonstrating safe usage of BundleResourceLoader for default.csv file loading.
